@@ -21,8 +21,8 @@ def print_missing_values(df: pd.DataFrame):
 
 def drop_invalid_guests (df:pd.DataFrame) -> pd.DataFrame:
     """Removes rows where adults there are no adults present"""
-    print("record count before invalid guest", df.shape)
-    print("record count after invalid guest", df[df["adults"]>0].shape)
+   # print("record count before invalid guest", df.shape)
+   # print("record count after invalid guest", df[df["adults"]>0].shape)
     return df[df["adults"]>0]
 
 def fill_missing_values(df: pd.DataFrame) -> pd.DataFrame:
