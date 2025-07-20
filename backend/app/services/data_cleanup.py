@@ -5,7 +5,7 @@ def read_file(file_path: str) -> pd.DataFrame:
     if file_path.endswith('.csv'):
         df = pd.read_csv(file_path)
     elif file_path.endswith(('.xls', '.xlsx')):
-        df = pd.read_excel(file_path)
+        df = pd.read_excel(file_path) 
     else:
         raise ValueError("Unsupported file format. Use CSV or Excel.")
     return df
