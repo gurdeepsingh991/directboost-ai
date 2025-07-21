@@ -12,7 +12,7 @@ def read_file(file_path: str) -> pd.DataFrame:
 
 def print_missing_values(df: pd.DataFrame):
     missing = df.isnull().sum()
-    missing = missing[missing > 0] 
+    missing = missing[missing > 0]  
     if missing.empty:
         print(" No missing values found.")
     else:
@@ -55,7 +55,7 @@ def add_derived_features(df: pd.DataFrame) -> pd.DataFrame:
     df['is_high_spender'] = (df['adr'] > df['adr'].median()).astype(int)
     
     """weekend heavy"""
-    df['weekend_ratio'] = df['stays_in_weekend_nights'] / df['stay_length'].replace(0, 1)
+    df['weekend_ratio'] = df['stays_in_weekend_nights'] / df['total_stay_length'].replace(0, 1)
     
     return df
 
