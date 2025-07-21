@@ -5,7 +5,7 @@ def read_file(file_path: str) -> pd.DataFrame:
     if file_path.endswith('.csv'):
         df = pd.read_csv(file_path)
     elif file_path.endswith(('.xls', '.xlsx')):
-        df = pd.read_excel(file_path)
+        df = pd.read_excel(file_path) 
     else:
         raise ValueError("Unsupported file format. Use CSV or Excel.")
     return df
@@ -21,8 +21,8 @@ def print_missing_values(df: pd.DataFrame):
 
 def drop_invalid_guests (df:pd.DataFrame) -> pd.DataFrame:
     """Removes rows where adults there are no adults present"""
-    print("record count before invalid guest", df.shape)
-    print("record count after invalid guest", df[df["adults"]>0].shape)
+   # print("record count before invalid guest", df.shape)
+   # print("record count after invalid guest", df[df["adults"]>0].shape)
     return df[df["adults"]>0]
 
 def fill_missing_values(df: pd.DataFrame) -> pd.DataFrame:
