@@ -1,8 +1,13 @@
-import Button from "../../components/shared/Button";
+import { useNavigate } from "react-router-dom";
+import Button from "../components/shared/Button";
 
 export default function Home() {
+  const navigate = useNavigate();
+
   const getStarted = () => {
-  }
+    console.log("redirecting");
+    navigate("/dashboard");  
+  };
   return (
     <>
       <div className='flex flex-col items-center pt-30'>
