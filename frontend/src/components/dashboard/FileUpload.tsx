@@ -1,15 +1,27 @@
-import React from "react";
+import React, { useEffect } from "react";
+import apiUtils from "../../utils/apiUtils";
 
 export default function FileUpload() {
-    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { uploadBookingFile } = apiUtils();
+
+    
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
             console.log("Uploaded file:", file);
         }
+        if (!file) {
+            console.error("No file selected");
+            return;
+          }
+
+       const response = await uploadBookingFile(file);
+        console.log(response)
+
     };
     return (
         <div className="flex items-center flex-col justify-center w-full mt-10">
-           
+
             <h1 className="text-3xl">Upload your csv file to start the process</h1>
 
             <label className="flex flex-col items-center justify-center w-full mt-9 max-w-md h-64 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">

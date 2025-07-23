@@ -11,6 +11,9 @@ data/
 node_modules/
 dist/
 .env.local
+frontend/node_modules
 
 # Mac
 .DS_Store
+
+.evn

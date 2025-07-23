@@ -1,8 +1,13 @@
 import { Outlet } from 'react-router'
 import './App.css'
 import Header from './components/shared/Header'
+import { useEffect } from 'react'
+import apiUtils from './utils/apiUtils'
+
 
 function App() {
+  
+
   return (
     <>
       <Header />
