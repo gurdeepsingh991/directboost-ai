@@ -3,7 +3,6 @@ import apiUtils from "../../utils/apiUtils";
 
 export default function FileUpload() {
     const { uploadBookingFile } = apiUtils();
-
     
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
