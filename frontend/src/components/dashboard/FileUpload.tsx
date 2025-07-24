@@ -10,7 +10,7 @@ interface FileUploadProps {
 export default function FileUpload({ lable, handleUpload, handleRemove, file, isUploading }: FileUploadProps) {
    
     return (
-        <div className="flex flex-col items-center w-full mt-10 px-4 text-center">
+        <div className="flex flex-col items-center w-full  px-4 text-center">
         <h1 className="text-2xl font-semibold text-gray-800 mb-4">{lable}</h1>
       
         {/* File Upload Drop Area */}

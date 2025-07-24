@@ -68,7 +68,7 @@ export default function Dashboard() {
         <>
              <Stepper step={step} />
             {step == 1 &&
-                <div className='flex flex-col items-center pt-5'>
+                <div className='flex flex-col items-center pt-16'>
                     <FileUpload lable="Step 1: Upload your booking history file." file={files.bookingFile} isUploading={isUploading} handleUpload={handleFileUpload} handleRemove={handleRemove} />
                     <div className="mt-5">
                         <Button disabled={!files.bookingFile} type='normal' label='Next' onClick={() => setStep(step + 1)} />
@@ -76,7 +76,7 @@ export default function Dashboard() {
                 </div>
             }
             {step == 2 &&
-                <div className='flex flex-col items-center pt-5'>
+                <div className='flex flex-col items-center pt-16'>
                     <FileUpload lable="Step 2: Upload your finance file." file={files.financeFile} isUploading={isUploading} handleUpload={handleFileUpload} handleRemove={handleRemove} />
                     <div className="w-full flex flex-row mt-5 justify-around px-4">
                         <Button disabled={false} type='normal' label='Back' onClick={() => setStep(step - 1)} />
