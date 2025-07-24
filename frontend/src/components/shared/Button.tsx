@@ -2,14 +2,15 @@ interface ButtonProps {
     type?: 'normal' | 'cancel' | 'delete';
     label?: string;
     onClick?: () => void;
+    disabled:boolean
   }
   
-  export default function Button({ type = 'normal', label = 'Get Started', onClick }: ButtonProps) {
+  export default function Button({ type = 'normal', label = 'Get Started', onClick, disabled }: ButtonProps) {
     const buttonTypes = {
       normal: {
-        buttonColor: 'bg-blue-600',
-        borderColor: 'border-blue-700',
-        hoverColor: 'hover:bg-blue-500',
+        buttonColor: 'bg-blue-500',
+        borderColor: 'border-blue-600',
+        hoverColor: 'hover:bg-blue-400',
         ringColor: 'focus:ring-blue-400',
       },
       cancel: {
@@ -31,6 +32,7 @@ interface ButtonProps {
     return (
       <button
         onClick={onClick}
+        disabled={disabled}
         className={`
           ${styles.buttonColor} 
           ${styles.borderColor} 
@@ -41,6 +43,7 @@ interface ButtonProps {
           font-semibold shadow-sm hover:shadow-md 
           focus:outline-none focus:ring-2
           cursor-pointer
+          ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
         `}
       >
         {label}
