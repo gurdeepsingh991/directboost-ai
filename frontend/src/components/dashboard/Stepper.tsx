@@ -6,7 +6,7 @@ interface StepperProps{
 export default function Stepper({ step }:StepperProps) {
     const steps = ["Upload Booking", "Upload Finance", "Segmentation", "Discounts", "Email Preview", "Send Emails"];
     return (
-        <div className="flex pt-20 justify-between mb-6 w-full max-w-2xl mx-auto opacity-80">
+        <div className="flex pt-26 justify-between mb-6 w-full max-w-2xl mx-auto opacity-80">
             {steps.map((stepName, index) => (
                 <div key={index} className="flex-1 text-center relative">
                     <div
