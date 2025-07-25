@@ -1,12 +1,12 @@
 from fastapi import FastAPI
-from app.routers import segmentation
-from app.routers import data_cleanup
+from app.routers import segmentation, data_cleanup, user_auth
 from fastapi.middleware.cors import CORSMiddleware
 
 app= FastAPI()
 
 app.include_router(segmentation.router, prefix="/segment", tags=["segmentation"])
 app.include_router(data_cleanup.router, prefix="/data-cleanup", tags=["uploadFile"])
+app.include_router(user_auth.router, prefix="/auth", tags=["user_auth"])
 
 app.add_middleware(
     CORSMiddleware,
@@ -19,3 +19,7 @@ app.add_middleware(
 @app.get("/")
 def read_root():
     return {"message": "Welcome!"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)

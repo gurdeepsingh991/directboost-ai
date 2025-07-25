@@ -2,39 +2,46 @@ import { useNavigate } from "react-router-dom";
 import Button from "../components/shared/Button";
 import { usePersistentState } from "../hooks/usePersistanceStorage";
 import { useEffect, useState } from "react";
+import apiUtils from "../utils/apiUtils";
 
 export default function Home() {
   const [email, setEmail] = usePersistentState<string>('email', '')
   const navigate = useNavigate();
   const [isValidEmail, setIsValidEmail] = useState<boolean>(false)
+  const { validateUser } = apiUtils();
 
-  useEffect (()=>{
-    if(email){
+  useEffect(() => {
+    if (email) {
       navigate('/dashboard')
     }
 
-  },[])
+  }, [])
 
-  const updateEmail = (enteredEmail: string) => {
+  const updateEmail = async (enteredEmail: string) => {
     validateEmail(enteredEmail)
     setEmail(enteredEmail)
     console.log(enteredEmail)
   }
 
-  const getStarted = () => {
-    console.log("redirecting");
-    navigate("/dashboard");
-  };
-
-  const validateEmail = (enteredEmail:string)=>{
-
-    if(/^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/.test(enteredEmail)){
-      setIsValidEmail(true)
+  const getStarted = async () => {
+    const response = await validateUser(email);
+    if (response.success) {
+      console.log(response)
+      console.log("redirecting");
+      navigate("/dashboard");
     }
     else{
+      console.log(response.message)
+    }
+  };
+
+  const validateEmail = (enteredEmail: string) => {
+    if (/^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/.test(enteredEmail)) {
+      setIsValidEmail(true)
+    }
+    else {
       setIsValidEmail(false)
     }
-
   }
 
   return (
