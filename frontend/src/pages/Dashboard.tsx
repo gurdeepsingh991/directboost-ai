@@ -1,17 +1,18 @@
 import FileUpload from "../components/dashboard/FileUpload";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import apiUtils from "..//utils/apiUtils";
 import Button from "../components/shared/Button";
 import { usePersistentState } from "../hooks/usePersistanceStorage";
 import Stepper from "../components/dashboard/Stepper";
 
 export default function Dashboard() {
+    const [email] = usePersistentState<string>('email', '')
 
     const [files, setFiles] = usePersistentState<{
         bookingFile: string | null
         financeFile: string | null
-    }>('files',{
+    }>('files', {
         bookingFile: null,
         financeFile: null
     });
@@ -41,32 +42,32 @@ export default function Dashboard() {
     const bookingFileUpload = async (file: File) => {
 
         setIsUploding(true)
-        const response = await uploadBookingFile(file);
+        const response = await uploadBookingFile(file, email);
         setIsUploding(false)
         console.log(response)
     }
 
     const financeFileUpload = async (file: File) => {
         setIsUploding(true)
-        const response = await uploadBookingFile(file);
+        const response = await uploadBookingFile(file,email);
         setIsUploding(false)
         console.log(response)
 
     }
     const handleRemove = () => {
 
-        if(step==1){
+        if (step == 1) {
             //api call
-            setFiles ((prev)=> ({...prev,bookingFile:""}))
+            setFiles((prev) => ({ ...prev, bookingFile: "" }))
         }
-        if(step==2){
+        if (step == 2) {
             //api call
-            setFiles ((prev)=> ({...prev,financeFile:""}))
+            setFiles((prev) => ({ ...prev, financeFile: "" }))
         }
     }
     return (
         <>
-             <Stepper step={step} />
+            <Stepper step={step} />
             {step == 1 &&
                 <div className='flex flex-col items-center pt-16'>
                     <FileUpload lable="Step 1: Upload your booking history file." file={files.bookingFile} isUploading={isUploading} handleUpload={handleFileUpload} handleRemove={handleRemove} />

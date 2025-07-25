@@ -14,7 +14,7 @@ export default function FileUpload({ lable, handleUpload, handleRemove, file, is
         <h1 className="text-2xl font-semibold text-gray-800 mb-4">{lable}</h1>
       
         {/* File Upload Drop Area */}
-        {!file && (
+        {!file &&  (
           <label className="flex flex-col items-center justify-center w-full max-w-md h-64 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors">
             <div className="flex flex-col items-center justify-center pt-5 pb-6">
               <svg
@@ -50,12 +50,6 @@ export default function FileUpload({ lable, handleUpload, handleRemove, file, is
             />
           </label>
         )}
-      
-        {/* Uploading Indicator */}
-        {isUploading && (
-          <p className="mt-4 text-sm text-blue-600 animate-pulse">Uploading...</p>
-        )}
-      
         {/* Uploaded File Preview */}
         {file && (
           <div className="flex items-center justify-between mt-5 w-full max-w-md bg-blue-50 border border-blue-200 rounded-xl px-4 py-2">
@@ -69,6 +63,10 @@ export default function FileUpload({ lable, handleUpload, handleRemove, file, is
               Remove
             </button>
           </div>
+        )}
+         {/* Uploading Indicator */}
+         {isUploading && (
+          <p className="mt-4 text-sm text-blue-600 animate-pulse">Uploading...</p>
         )}
       </div>
       

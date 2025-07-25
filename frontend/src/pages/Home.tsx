@@ -14,12 +14,12 @@ export default function Home() {
     if (email) {
       navigate('/dashboard')
     }
-
   }, [])
 
   const updateEmail = async (enteredEmail: string) => {
     validateEmail(enteredEmail)
     setEmail(enteredEmail)
+
     console.log(enteredEmail)
   }
 

@@ -1,9 +1,10 @@
 const apiUrl = import.meta.env.VITE_API_ENDPOINT
 
 const apiUtils = () => {
-  const uploadBookingFile = async (file: File) => {
+  const uploadBookingFile = async (file: File,email:string) => {
     const formData = new FormData()
     formData.append("file", file)
+    formData.append("email", email)
     const response = await fetch(`${apiUrl}/data-cleanup/uploadbookingfile`, {
       method: 'POST',
       body: formData,

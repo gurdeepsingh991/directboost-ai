@@ -65,15 +65,41 @@ def add_derived_features(df: pd.DataFrame) -> pd.DataFrame:
     
     return df
 
-async def upload_data_to_db (df: pd.DataFrame,email:str):
+def upload_data_to_db(df: pd.DataFrame, email: str) -> dict:
     try:
-        response = await supabase.table("users").select("suer_id").eq("email", email).execute()
-        df['user_id'] = response.data[0]
-        # response = supabase.table("booking_history").insert(df).execute()
-        # if(response):
-        #     return {"success": True, "message":"booking history file uploaded succcessfully"}
+        # Step 1: Fetch user ID
+        response = supabase.table("users").select("user_id").eq("email", email).execute()
+
+        if not response.data:
+            return {"success": False, "message": f"No user found with email: {email}"}
+
+        user_id = response.data[0]["user_id"]
+        df["user_id"] = user_id
+
+        # Step 2: Convert to list of records
+        records = df.to_dict(orient="records")
+
+        # Step 3: Insert into booking_history
+        insert_response = supabase.table("booking_history").insert(records).execute()
+
+        # Step 4: Check for insert errors
+        if not insert_response.data:
+            return {
+                "success": False,
+                "message": f"Error inserting records: {insert_response.error.message}"
+            }
+
+        return {
+            "success": True,
+            "message": "Booking history file uploaded successfully",
+            "inserted_rows": len(insert_response.data)
+        }
+
     except Exception as e:
-        return {"success": False, "message":f"Something went wrong while uploading the file. Error ${str(e)}"}
+        return {
+            "success": False,
+            "message": f"Something went wrong while uploading the file. Error: {str(e)}"
+        }
 
 def clean_booking_data(file: UploadFile,email:str) -> pd.DataFrame:
     """
@@ -84,6 +110,6 @@ def clean_booking_data(file: UploadFile,email:str) -> pd.DataFrame:
     df = drop_invalid_guests(df)
     df = fill_missing_values(df)
     df = add_derived_features(df)
-    response = upload_data_to_db(file,email)
+    response = upload_data_to_db(df,email)
     print(response)
     return response
