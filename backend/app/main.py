@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from app.routers import segmentation, data_cleanup, user_auth
+from app.routers.models import train_test
 from fastapi.middleware.cors import CORSMiddleware
 
 app= FastAPI()
@@ -7,6 +8,7 @@ app= FastAPI()
 app.include_router(segmentation.router, prefix="/segment", tags=["segmentation"])
 app.include_router(data_cleanup.router, prefix="/data-cleanup", tags=["uploadFile"])
 app.include_router(user_auth.router, prefix="/auth", tags=["user_auth"])
+app.include_router(train_test.router, prefix="/model", tags=["train_test"])
 
 app.add_middleware(
     CORSMiddleware,
