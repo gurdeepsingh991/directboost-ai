@@ -14,8 +14,7 @@ def genrate_segments(email:str):
     #Step 3: add sengents
     df_segmented = segment_customers(df_saved, df_final)
     
-    
-    
+       
 def data_encode_and_scale(df_saved:pd.DataFrame):
     df_numericals = df_saved[SEG_NUMERICAL_COLUMNS]
     df_categorical = df_saved[SEG_CAT_COLUMNS]
@@ -27,7 +26,6 @@ def data_encode_and_scale(df_saved:pd.DataFrame):
     df_final= pd.concat([df_scaled,df_encoded ], axis=1)
     
     return df_final
-        
         
         
 def encode_data(df_cat:pd.DataFrame):
