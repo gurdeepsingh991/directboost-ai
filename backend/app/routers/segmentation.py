@@ -1,8 +1,10 @@
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Form
+from app.services.segments import genrate_segments
 
 router = APIRouter()
-
-@router.get("/hello")
-def hello_segment():
-    return {"message": "Segmentation route is working!"}
+#GS: add email from ui
+@router.get("/genrate-segments")
+def genrate_customer_segments():
+   email = "thisisgurdeep@gmail.com"
+   response = genrate_segments(email)

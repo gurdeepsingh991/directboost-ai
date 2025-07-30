@@ -3,8 +3,7 @@ from fastapi import File,UploadFile
 import io
 from app.db.supabase_client import supabase
 
-# GS:delete later 
-def load_file(file: UploadFile) -> pd.DataFrame:
+def read_file(file: UploadFile) -> pd.DataFrame:
     filename = file.filename.lower()
     if filename.endswith('.csv'):
         content = file.file.read()
@@ -75,14 +74,17 @@ def upload_data_to_db(df: pd.DataFrame, email: str) -> dict:
 
         user_id = response.data[0]["user_id"]
         df["user_id"] = user_id
+        
+        #Step 2: make all previous booking history as inactive
+        response = supabase.table("booking_history").update({"is_active": False}).eq("user_id",user_id).execute()
 
-        # Step 2: Convert to list of records
+        # Step 3: Convert to list of records
         records = df.to_dict(orient="records")
 
-        # Step 3: Insert into booking_history
+        # Step 4: Insert into booking_history
         insert_response = supabase.table("booking_history").insert(records).execute()
 
-        # Step 4: Check for insert errors
+        # Step 5: Check for insert errors
         if not insert_response.data:
             return {
                 "success": False,
@@ -101,15 +103,36 @@ def upload_data_to_db(df: pd.DataFrame, email: str) -> dict:
             "message": f"Something went wrong while uploading the file. Error: {str(e)}"
         }
 
-def clean_booking_data(file: UploadFile,email:str) -> pd.DataFrame:
+def process_booking_data(file: UploadFile,email:str) -> pd.DataFrame:
     """
     Master function to read a raw booking file and return a cleaned DataFrame
     ready for segmentation.
     """
-    df = load_file(file)
+    df = read_file(file)
     df = drop_invalid_guests(df)
     df = fill_missing_values(df)
     df = add_derived_features(df)
     response = upload_data_to_db(df,email)
-    print(response)
     return response
+
+
+def get_booking_data_from_db(email: str): 
+    try:
+        # Step 1: Fetch user ID
+        response = supabase.table("users").select("user_id").eq("email", email).execute()
+
+        if not response.data:
+            return {"success": False, "message": f"No user found with email: {email}"}
+
+        user_id = response.data[0]["user_id"]
+        
+        response = supabase.table("booking_history").select("*").eq("user_id",user_id).eq("is_active", True).execute()
+        
+        if not response.data:
+            return {"success": False, "message": f"Unable to fetch booking data"}
+        
+        df = pd.DataFrame(response.data)
+        return  df 
+    except Exception as e:
+            return {"success": False, "message": f"Something went wrong: {e}"}
+    
