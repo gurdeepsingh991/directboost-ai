@@ -135,4 +135,21 @@ def get_booking_data_from_db(email: str):
         return  df 
     except Exception as e:
             return {"success": False, "message": f"Something went wrong: {e}"}
+        
+def insert_segment_records(df_segmented: pd.DataFrame):
+    try:
+        records = []
+        for _, row in df_segmented.iterrows():
+            records.append({
+                "booking_id": row["id"],
+                "segment_cluster": row["segment_cluster"],
+                "model_version": row["model_version"],
+                "is_active": True
+            })
+
+        response = supabase.table("booking_segments").insert(records).execute()
+
+        return {"success": True, "inserted": len(records)}
     
+    except Exception as e:
+        return {"success": False, "message": f"Segment insert failed: {e}"}

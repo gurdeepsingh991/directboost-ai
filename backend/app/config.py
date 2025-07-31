@@ -1,6 +1,8 @@
 from dotenv import load_dotenv
 from pathlib import Path
 import os 
+from datetime import datetime
+
 
 env_path = Path(__file__).resolve().parents[1]/".env"
 load_dotenv(dotenv_path= env_path)
@@ -43,3 +45,5 @@ SEG_CAT_COLUMNS: list[str]= [
 ]
 
 N_CLUSTERS:int = 5
+
+MODEL_VERSION = f"v1-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"

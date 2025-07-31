@@ -5,7 +5,7 @@ const apiUtils = () => {
     const formData = new FormData()
     formData.append("file", file)
     formData.append("email", email)
-    const response = await fetch(`${apiUrl}/data-cleanup/uploadbookingfile`, {
+    const response = await fetch(`${apiUrl}/process-bookings/uploadbookingfile`, {
       method: 'POST',
       body: formData,
     })
