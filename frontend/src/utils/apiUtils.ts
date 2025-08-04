@@ -26,7 +26,19 @@ const apiUtils = () => {
 
   }
 
-  return { uploadBookingFile, validateUser }
+  const genrateCustomerSegments = async (email:string)=>{
+      const formData = new FormData()
+      formData.append("email", email)
+      const response = await fetch(`${apiUrl}/segment/genrate-segments`, {
+        method: "POST",
+        body: formData
+      })
+  
+      const result = await response.json()
+      return result
+  }
+
+  return { uploadBookingFile, validateUser,genrateCustomerSegments }
 }
 
 
