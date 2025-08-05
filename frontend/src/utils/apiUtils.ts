@@ -38,7 +38,17 @@ const apiUtils = () => {
       return result
   }
 
-  return { uploadBookingFile, validateUser,genrateCustomerSegments }
+  const getSegmentProfiles = async ()=>{
+
+    const response = await fetch(`${apiUrl}/segment/get-segment-profiles`)
+
+    const result = await response.json()
+
+    return result
+
+  }
+
+  return { uploadBookingFile, validateUser,genrateCustomerSegments,getSegmentProfiles }
 }
 
 
