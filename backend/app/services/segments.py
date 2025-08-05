@@ -123,10 +123,9 @@ def log_kmeans_details(model, X_scaled, duration, feature_names=None, show_label
     print("\n✅ Clustering summary logging complete.\n")
     
     
-def get_latest_segment_profiles():
+def get_latest_segment_profiles(email):
     try:
         response = supabase.table("segment_profiles").select('*').eq("is_active", True).execute()
-        
         if response.data:
             return {"success": True, "data": response.data}
         else:

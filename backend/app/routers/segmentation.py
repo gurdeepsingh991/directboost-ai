@@ -10,7 +10,7 @@ def genrate_customer_segments( email: str = Form(...)):
    response = generate_segments(email)
    return response
    
-@router.get("/get-segment-profiles")
-def get_segment_profiles():
-   response = get_latest_segment_profiles()
+@router.post("/get-segment-profiles")
+def get_segment_profiles(email: str = Form(...)):
+   response = get_latest_segment_profiles(email)
    return response
