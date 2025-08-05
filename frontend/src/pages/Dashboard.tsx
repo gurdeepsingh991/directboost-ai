@@ -10,9 +10,10 @@ export default function Dashboard() {
     const [email] = usePersistentState<string>('email', '')
     const [message, setMessage] = useState("")
     const [error, setError] = useState("")
-    const [segmentProfile, setSegmentProfile] = useState([])
+    const [segmentProfile, setSegmentProfile] = usePersistentState("segmentProfile", [])
     const [creatingSegment, setCreatingSegment] = useState(false)
-    const [segmentCounts, setSegmentCounts] =   usePersistentState<Record<number, number>>("segmentCounts",{});
+    const [bookingRecordCount, setBookingRecordCount] = usePersistentState("booking_record", 0)
+    const [segmentCounts, setSegmentCounts] = usePersistentState<Record<number, number>>("segmentCounts", {});
 
 
     const [files, setFiles] = usePersistentState<{
@@ -52,7 +53,7 @@ export default function Dashboard() {
             financeFileUpload(file)
             console.log("Uploaded file:", file);
         }
-    };
+    }; 
 
     const bookingFileUpload = async (file: File) => {
         setIsProcessing(true)
@@ -72,13 +73,10 @@ export default function Dashboard() {
         const response = await uploadBookingFile(file, email);
         setIsProcessing(false)
         console.log(response)
-
     }
-
     const getSegmentProfile = async () => {
-        const response = await getSegmentProfiles()
+        const response = await getSegmentProfiles(email)
         setSegmentProfile(response.data)
-
         console.log(response)
     }
 
@@ -144,7 +142,7 @@ export default function Dashboard() {
                     </p>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6 w-full max-w-5xl">
-                        {segmentProfile.map((profile: any) => {
+                        {segmentProfile?.map((profile: any) => {
                             const iconMap: Record<number, string> = {
                                 0: "👥",
                                 1: "👨‍👩‍👧",
@@ -209,7 +207,7 @@ export default function Dashboard() {
                             label="Back"
                             onClick={() => setStep(step - 1)}
                         />
-                        {(Object.keys(segmentCounts)).length==0 &&
+                        {(Object.keys(segmentCounts)).length == 0 &&
                             <Button
                                 type="normal"
                                 disabled={isProcessing}

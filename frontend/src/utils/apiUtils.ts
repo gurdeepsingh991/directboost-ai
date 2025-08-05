@@ -38,10 +38,15 @@ const apiUtils = () => {
       return result
   }
 
-  const getSegmentProfiles = async ()=>{
-
-    const response = await fetch(`${apiUrl}/segment/get-segment-profiles`)
-
+  const getSegmentProfiles = async (email:string)=>{
+    const formData = new FormData()
+      formData.append("email", email)
+    const response = await fetch(`${apiUrl}/segment/get-segment-profiles`,
+      {
+        method: "POST",
+        body: formData
+      }
+    )
     const result = await response.json()
 
     return result
