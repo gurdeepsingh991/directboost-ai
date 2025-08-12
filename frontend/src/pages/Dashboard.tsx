@@ -53,7 +53,7 @@ export default function Dashboard() {
             financeFileUpload(file)
             console.log("Uploaded file:", file);
         }
-    }; 
+    };
 
     const bookingFileUpload = async (file: File) => {
         setIsProcessing(true)
@@ -164,9 +164,11 @@ export default function Dashboard() {
                                                 {profile.business_label}
                                             </h3>
                                         </div>
-                                        <span className="bg-gray-100 text-gray-700 text-xs px-2 py-0.5 rounded-full">
-                                            {segmentCounts?.[profile.cluster_id] || 0} records
-                                        </span>
+                                        {(Object.keys(segmentCounts)).length > 0 &&
+                                            <span className="bg-gray-100 text-gray-700 text-xs px-2 py-0.5 rounded-full animate-pulse">
+                                                {segmentCounts?.[profile.cluster_id] || 0} records
+                                            </span>
+                                        }
                                     </div>
 
                                     {/* Tags */}
