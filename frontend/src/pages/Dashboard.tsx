@@ -5,6 +5,7 @@ import apiUtils from "..//utils/apiUtils";
 import Button from "../components/shared/Button";
 import { usePersistentState } from "../hooks/usePersistanceStorage";
 import Stepper from "../components/dashboard/Stepper";
+import Discounts from "../components/dashboard/Discounts";
 
 export default function Dashboard() {
     const [email] = usePersistentState<string>('email', '')
@@ -24,9 +25,9 @@ export default function Dashboard() {
         financeFile: null
     });
     const [isProcessing, setIsProcessing] = useState<boolean>(false)
-    const [step, setStep] = useState<number>(1);
+    const [step, setStep] = usePersistentState<number>("step",1);
 
-    const { uploadBookingFile, genrateCustomerSegments, getSegmentProfiles } = apiUtils();
+    const { uploadBookingFile, genrateCustomerSegments, getSegmentProfiles, uploadFinanacialsFile} = apiUtils();
 
     useEffect(() => {
         setTimeout(() => {
@@ -70,7 +71,7 @@ export default function Dashboard() {
 
     const financeFileUpload = async (file: File) => {
         setIsProcessing(true)
-        const response = await uploadBookingFile(file, email);
+        const response = await uploadFinanacialsFile(file, email);
         setIsProcessing(false)
         console.log(response)
     }
@@ -226,6 +227,10 @@ export default function Dashboard() {
                     </div>
                 </div>
             )}
+            {step == 4 &&
+               <Discounts></Discounts>
+            }
+
 
 
         </>

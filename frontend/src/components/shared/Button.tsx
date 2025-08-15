@@ -2,10 +2,10 @@ interface ButtonProps {
     type?: 'normal' | 'cancel' | 'delete';
     label?: string;
     onClick?: () => void;
-    disabled:boolean
+    disabled?:boolean
   }
   
-  export default function Button({ type = 'normal', label = 'Get Started', onClick, disabled }: ButtonProps) {
+  export default function Button({ type = 'normal', label = 'Get Started', onClick, disabled= false }: ButtonProps) {
     const buttonTypes = {
       normal: {
         buttonColor: 'bg-blue-500',
