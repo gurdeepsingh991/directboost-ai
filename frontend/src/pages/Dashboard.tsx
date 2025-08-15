@@ -1,178 +1,210 @@
 import FileUpload from "../components/dashboard/FileUpload";
-
 import React, { useEffect, useState } from "react";
-import apiUtils from "..//utils/apiUtils";
+import apiUtils from "../utils/apiUtils";
 import Button from "../components/shared/Button";
 import { usePersistentState } from "../hooks/usePersistanceStorage";
 import Stepper from "../components/dashboard/Stepper";
 import Discounts from "../components/dashboard/Discounts";
 
 export default function Dashboard() {
-    const [email] = usePersistentState<string>('email', '')
-    const [message, setMessage] = useState("")
-    const [error, setError] = useState("")
-    const [segmentProfile, setSegmentProfile] = usePersistentState("segmentProfile", [])
-    const [creatingSegment, setCreatingSegment] = useState(false)
-    const [bookingRecordCount, setBookingRecordCount] = usePersistentState("booking_record", 0)
-    const [segmentCounts, setSegmentCounts] = usePersistentState<Record<number, number>>("segmentCounts", {});
+    const [email] = usePersistentState<string>("email", "");
+    const [message, setMessage] = useState("");
+    const [error, setError] = useState("");
+    const [segmentProfile, setSegmentProfile] = usePersistentState("segmentProfile", []);
+    const [creatingSegment, setCreatingSegment] = useState(false);
+    // const [bookingRecordCount, setBookingRecordCount] = usePersistentState("booking_record", 0);
+    const [segmentCounts, setSegmentCounts] =
+        usePersistentState<Record<number, number>>("segmentCounts", {});
+    const [files, setFiles] = usePersistentState<{ bookingFile: string | null; financeFile: string | null }>(
+        "files",
+        { bookingFile: null, financeFile: null }
+    );
+    const [isProcessing, setIsProcessing] = useState<boolean>(false);
+    const [step, setStep] = usePersistentState<number>("step", 1);
 
-
-    const [files, setFiles] = usePersistentState<{
-        bookingFile: string | null
-        financeFile: string | null
-    }>('files', {
-        bookingFile: null,
-        financeFile: null
-    });
-    const [isProcessing, setIsProcessing] = useState<boolean>(false)
-    const [step, setStep] = usePersistentState<number>("step",1);
-
-    const { uploadBookingFile, genrateCustomerSegments, getSegmentProfiles, uploadFinanacialsFile} = apiUtils();
+    const { uploadBookingFile, genrateCustomerSegments, getSegmentProfiles, uploadFinanacialsFile } =
+        apiUtils();
 
     useEffect(() => {
-        setTimeout(() => {
-            setError("")
-            setMessage("")
+        const t = setTimeout(() => {
+            setError("");
+            setMessage("");
         }, 1000);
-
-    }, [message, error])
-
+        return () => clearTimeout(t);
+    }, [message, error]);
 
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (!file) {
-            console.error("No file selected");
-            return;
-        }
-        if (file && step === 1) {
-            setFiles((prev) => ({ ...prev, bookingFile: file.name }))
-            bookingFileUpload(file)
-            console.log("Uploaded file:", file);
-        }
-        if (file && step === 2) {
-            setFiles((prev) => ({ ...prev, financeFile: file.name }))
-            financeFileUpload(file)
-            console.log("Uploaded file:", file);
+        if (!file) return;
+
+        if (step === 1) {
+            setFiles((prev) => ({ ...prev, bookingFile: file.name }));
+            bookingFileUpload(file);
+        } else if (step === 2) {
+            setFiles((prev) => ({ ...prev, financeFile: file.name }));
+            financeFileUpload(file);
         }
     };
 
     const bookingFileUpload = async (file: File) => {
-        setIsProcessing(true)
+        setIsProcessing(true);
         const response = await uploadBookingFile(file, email);
-        if (response.success) {
-            setIsProcessing(false)
-            setMessage("Booking file Uploaded succesfully.")
-        }
-        else {
-            setError("Error while uploading the file.")
-        }
-        console.log(response)
-    }
+        setIsProcessing(false);
+        if (response.success) setMessage("Booking file uploaded successfully.");
+        else setError("Error while uploading the file.");
+    };
 
     const financeFileUpload = async (file: File) => {
-        setIsProcessing(true)
-        const response = await uploadFinanacialsFile(file, email);
-        setIsProcessing(false)
-        console.log(response)
-    }
+        setIsProcessing(true);
+        await uploadFinanacialsFile(file, email);
+        setIsProcessing(false);
+    };
+
     const getSegmentProfile = async () => {
-        const response = await getSegmentProfiles(email)
-        setSegmentProfile(response.data)
-        console.log(response)
-    }
+        const response = await getSegmentProfiles(email);
+        setSegmentProfile(response.data);
+    };
 
     const genrateSegments = async () => {
         setIsProcessing(true);
         setCreatingSegment(true);
         const response = await genrateCustomerSegments(email);
-        if (response.success) {
-            setSegmentCounts(response.segment_counts); // store counts from backend
-        }
+        if (response.success) setSegmentCounts(response.segment_counts);
         setIsProcessing(false);
         setCreatingSegment(false);
     };
 
-
     const handleRemove = () => {
+        if (step === 1) setFiles((prev) => ({ ...prev, bookingFile: "" }));
+        if (step === 2) setFiles((prev) => ({ ...prev, financeFile: "" }));
+    };
 
-        if (step == 1) {
-            //api call
-            setFiles((prev) => ({ ...prev, bookingFile: "" }))
-        }
-        if (step == 2) {
-            //api call
-            setFiles((prev) => ({ ...prev, financeFile: "" }))
-        }
-    }
+    /** Fixed action bar (viewport-fixed) */
+    const FixedActionBar = ({ children }: { children: React.ReactNode }) => (
+        <>
+            {/* spacer to avoid overlap */}
+            <div className="h-24" />
+            <div
+                className="
+          fixed inset-x-0 bottom-0 z-40
+          border-t border-gray-200
+          bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/70
+          shadow-[0_-6px_12px_-8px_rgba(0,0,0,0.15)]
+          py-3
+          pb-[calc(0.75rem+env(safe-area-inset-bottom))]
+        "
+            >
+                <div className="max-w-6xl mx-auto px-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex flex-col">
+                            <span className="text-sm font-medium text-gray-800">
+                                {step === 1 && "Step 1: Upload Booking"}
+                                {step === 2 && "Step 2: Upload Finance"}
+                                {step === 3 && "Step 3: Segmentation"}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                                Your progress is saved locally. Continue when ready.
+                            </span>
+                        </div>
+                        <div className="flex items-center gap-2 sm:gap-3">{children}</div>
+                    </div>
+                </div>
+            </div>
+        </>
+    );
+
     return (
         <>
             <Stepper step={step} />
-            {step == 1 &&
-                <div className='flex flex-col items-center pt-16'>
-                    <FileUpload lable="Step 1: Upload your booking history file." file={files.bookingFile} isUploading={isProcessing} handleUpload={handleFileUpload} handleRemove={handleRemove} />
+
+            {/* STEP 1 */}
+            {step === 1 && (
+                <div className="flex flex-col items-center pt-40 px-4">
+                    <FileUpload
+                        lable="Upload your booking history file."
+                        file={files.bookingFile}
+                        isUploading={isProcessing}
+                        handleUpload={handleFileUpload}
+                        handleRemove={handleRemove}
+                    />
                     <div className="mt-5">
                         <p className="text-green-400">{message}</p>
                         <p className="text-red-400">{error}</p>
                     </div>
-                    <div className="mt-5">
-                        <Button disabled={!files.bookingFile} type='normal' label='Next' onClick={() => { setStep(step + 1); setMessage("") }} />
-                    </div>
+
+                    <FixedActionBar>
+                        <span className="hidden sm:block" />
+                        <Button
+                            disabled={!files.bookingFile}
+                            type="normal"
+                            label="Next"
+                            onClick={() => {
+                                setStep(step + 1);
+                                setMessage("");
+                            }}
+                        />
+                    </FixedActionBar>
                 </div>
-            }
-            {step == 2 &&
-                <div className='flex flex-col items-center pt-16'>
-                    <FileUpload lable="Step 2: Upload your finance file." file={files.financeFile} isUploading={isProcessing} handleUpload={handleFileUpload} handleRemove={handleRemove} />
+            )}
+
+            {/* STEP 2 */}
+            {step === 2 && (
+                <div className="flex flex-col items-center pt-40 px-4">
+                    <FileUpload
+                        lable="Upload your finance file."
+                        file={files.financeFile}
+                        isUploading={isProcessing}
+                        handleUpload={handleFileUpload}
+                        handleRemove={handleRemove}
+                    />
                     <div className="mt-5">
-                        <p className="text-green-400 ">{message}</p>
+                        <p className="text-green-400">{message}</p>
                         <p className="text-red-400">{error}</p>
                     </div>
-                    <div className="w-full flex flex-row mt-5 justify-around px-4">
-                        <Button disabled={false} type='normal' label='Back' onClick={() => setStep(step - 1)} />
-                        <Button disabled={!files.financeFile} type='normal' label='Next' onClick={() => { setStep(step + 1); setMessage(""); getSegmentProfile() }} />
-                    </div>
-                </div>
-            }
 
+                    <FixedActionBar>
+                        <Button type="normal" label="Back" onClick={() => setStep(step - 1)} />
+                        <Button
+                            disabled={!files.financeFile}
+                            type="normal"
+                            label="Next"
+                            onClick={() => {
+                                setStep(step + 1);
+                                setMessage("");
+                                getSegmentProfile();
+                            }}
+                        />
+                    </FixedActionBar>
+                </div>
+            )}
+
+            {/* STEP 3 */}
             {step === 3 && (
-                <div className="w-full px-4 flex flex-col items-center pt-2 text-center">
+                <div className="w-full px-4 flex flex-col items-center pt-40 text-center">
                     <h1 className="text-2xl font-semibold text-gray-800 mb-1">
-                        Step 3: Generate customer segments
+                       Generate customer segments
                     </h1>
-                    <p className="text-gray-600 mb-6 text-sm">
-                        Our model will categorise your customers into these segments:
-                    </p>
+                    <p className="text-gray-600 mb-6 text-sm">Our model will categorise your customers into these segments:</p>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6 w-full max-w-5xl">
                         {segmentProfile?.map((profile: any) => {
-                            const iconMap: Record<number, string> = {
-                                0: "👥",
-                                1: "👨‍👩‍👧",
-                                2: "💻",
-                                3: "💼",
-                                4: "⭐",
-                            };
-
+                            const iconMap: Record<number, string> = { 0: "👥", 1: "👨‍👩‍👧", 2: "💻", 3: "💼", 4: "⭐" };
                             return (
                                 <div
                                     key={profile.cluster_id}
                                     className="p-4 bg-white border border-gray-100 rounded-lg shadow-sm hover:shadow-md transition-shadow"
                                 >
-                                    {/* Title Row */}
                                     <div className="flex justify-between items-center mb-3">
                                         <div className="flex items-center gap-2">
                                             <span className="text-lg">{iconMap[profile.cluster_id]}</span>
-                                            <h3 className="text-sm font-semibold text-gray-800">
-                                                {profile.business_label}
-                                            </h3>
+                                            <h3 className="text-sm font-semibold text-gray-800">{profile.business_label}</h3>
                                         </div>
-                                        {(Object.keys(segmentCounts)).length > 0 &&
+                                        {Object.keys(segmentCounts).length > 0 && (
                                             <span className="bg-gray-100 text-gray-700 text-xs px-2 py-0.5 rounded-full animate-pulse">
                                                 {segmentCounts?.[profile.cluster_id] || 0} records
                                             </span>
-                                        }
+                                        )}
                                     </div>
-
-                                    {/* Tags */}
                                     <div className="flex flex-wrap gap-1">
                                         {profile.tags.map((tag: string) => (
                                             <span
@@ -202,37 +234,17 @@ export default function Dashboard() {
                         </div>
                     )}
 
-                    {/* Buttons */}
-                    <div className="w-full flex flex-row justify-between px-4 mt-6 max-w-md">
-                        <Button
-                            type="normal"
-                            disabled={isProcessing}
-                            label="Back"
-                            onClick={() => setStep(step - 1)}
-                        />
-                        {(Object.keys(segmentCounts)).length == 0 &&
-                            <Button
-                                type="normal"
-                                disabled={isProcessing}
-                                label="Generate Segments"
-                                onClick={() => genrateSegments()}
-                            />
-                        }
-                        <Button
-                            type="normal"
-                            label="Next"
-                            disabled={!files.financeFile}
-                            onClick={() => setStep(step + 1)}
-                        />
-                    </div>
+                    <FixedActionBar>
+                        <Button type="normal" disabled={isProcessing} label="Back" onClick={() => setStep(step - 1)} />
+                        {Object.keys(segmentCounts).length === 0 && (
+                            <Button type="normal" disabled={isProcessing} label="Generate Segments" onClick={genrateSegments} />
+                        )}
+                        <Button type="normal" label="Next" disabled={!files.financeFile} onClick={() => setStep(step + 1)} />
+                    </FixedActionBar>
                 </div>
             )}
-            {step == 4 &&
-               <Discounts></Discounts>
-            }
 
-
-
+            {step === 4 && <Discounts />}
         </>
-    )
+    );
 }

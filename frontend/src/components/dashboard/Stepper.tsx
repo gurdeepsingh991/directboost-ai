@@ -6,7 +6,12 @@ interface StepperProps {
 export default function Stepper({ step }: StepperProps) {
     const steps = ["Upload Booking", "Upload Finance", "Segmentation", "Discounts", "Email Preview", "Send Emails"];
     return (
-        <div className="flex pt-20 justify-between mb-6 w-full max-w-2xl mx-auto opacity-90">
+        <div className="flex pt-20 justify-between mb-6 w-full  mx-auto opacity-90
+          fixed inset-x-0  z-40
+          border-t border-gray-200
+          bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/70
+          shadow-[0_-6px_12px_-8px_rgba(0,0,0,0.15)]
+        ">
             {steps.map((stepName, index) => {
                 const isCompleted = index < step - 1;
                 const isActive = index === step - 1;

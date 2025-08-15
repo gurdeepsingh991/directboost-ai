@@ -1,19 +1,23 @@
+import { useState } from "react";
 import Button from "../../components/shared/Button";
 import { usePersistentState } from "../../hooks/usePersistanceStorage";
 import SegmentDiscountCard, {
   ALL_PERKS,
 } from "./SegmentDiscountCard";
-import type {
-    SegmentDiscountConfig,
-   
-  } from "./SegmentDiscountCard";
-import { useState } from "react";
+import type { SegmentDiscountConfig } from "./SegmentDiscountCard";
+import apiUtils from "../../utils/apiUtils";
+import DiscountSummary from "./DiscountSummary";
 
 type Strategy = "Balanced" | "Conservative" | "Aggressive";
 
 export default function Discounts() {
-  const [step, setStep] = usePersistentState<number>("step", 4);
+  const [email] = usePersistentState<string>("email", "");
+  const [step, setStep] = usePersistentState<number>("step", 0);
   const [strategy, setStrategy] = useState<Strategy>("Balanced");
+  const [showSummary, setShowSummary] = usePersistentState("discountSummary",false);
+
+  const { generateDiscountsAPI } =
+    apiUtils();
 
   // Seed from previous step/API in real flow.
   const initialData: SegmentDiscountConfig[] = [
@@ -70,7 +74,7 @@ export default function Discounts() {
     setConfig(updated);
   };
 
-  // ---- Copy-to-all (from one card) ----
+  // Copy this card's values to all segments
   const copyToAll = (source: SegmentDiscountConfig) => {
     const next = config.map((seg) => ({
       ...seg,
@@ -82,8 +86,7 @@ export default function Discounts() {
     setConfig(next);
   };
 
-  // ---- Strategy presets (global) ----
-  // Conservative: -20% to all % numbers, Aggressive: +25% (clamped 0..1)
+  // Strategy presets
   const applyStrategy = (mode: Strategy) => {
     const factor = mode === "Conservative" ? 0.8 : mode === "Aggressive" ? 1.25 : 1;
     const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
@@ -96,16 +99,14 @@ export default function Discounts() {
         high: clamp01(seg.baseline.high * factor),
       },
       boost_if_high_gap: clamp01(seg.boost_if_high_gap * factor),
-      // keep costs/perk order as-is
     }));
     setConfig(next);
     setStrategy(mode);
   };
 
-  // ---- Validation + export payload (schema preserved) ----
-  const getPayload = () => {
-    // Already decimals in state, so just return config
-    return config.map((c) => ({
+  // Final payload (schema preserved; % as decimals)
+  const getPayload = () =>
+    config.map((c) => ({
       cluster_id: c.cluster_id,
       business_label: c.business_label,
       baseline: c.baseline,
@@ -113,7 +114,6 @@ export default function Discounts() {
       max_perk_cost: c.max_perk_cost,
       perk_priority: c.perk_priority,
     }));
-  };
 
   const generateDiscounts = async () => {
     const issues: string[] = [];
@@ -135,19 +135,26 @@ export default function Discounts() {
     }
 
     const payload = getPayload();
+
     console.log("Segment Discount Array (ready to send):", payload);
 
-    // copy to clipboard quickly
     try {
-      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
-      alert("Discount configuration copied to clipboard and logged to console.");
-    } catch {
-      alert("Discount configuration logged to console.");
+      const response = await generateDiscountsAPI(email, payload);
+  
+      if (response.success) {
+        // Optionally show spinner
+        setShowSummary(true);
+      } else {
+        alert("Failed to generate discounts.");
+      }
+    } catch (err) {
+      console.error(err);
     }
   };
 
   return (
-    <div className="flex flex-col items-center pt-10 px-4 ">
+    <div className="flex flex-col items-center pt-40 px-4">
+      {/* Header */}
       <div className="w-full max-w-6xl mb-4 flex items-end justify-between gap-4">
         <div className="pl-56 text-center justify-center">
           <h1 className="text-2xl font-semibold text-gray-800">Step 4: Discount Generation</h1>
@@ -171,24 +178,66 @@ export default function Discounts() {
         </div>
       </div>
 
-      {/* Side-by-side cards */}
-      <div className="w-full max-w-6xl grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {config.map((seg, idx) => (
-          <SegmentDiscountCard
-            key={seg.cluster_id}
-            value={seg}
-            onChange={(next) => onSegmentChange(idx, next)}
-            onCopyToAll={() => copyToAll(seg)}
-          />
-        ))}
-      </div>
+      {/* Cards */}
+      {/* Cards */}
+      {!showSummary ? (
+        <div className="w-full max-w-6xl grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          {config.map((seg, idx) => (
+            <SegmentDiscountCard
+              key={seg.cluster_id}
+              value={seg}
+              onChange={(next) => onSegmentChange(idx, next)}
+              onCopyToAll={() => copyToAll(seg)}
+            />
+          ))}
+        </div>
+      ) : (
+        <DiscountSummary email={email} />
+      )}
 
-      {/* Footer actions */}
-      <div className="w-full max-w-6xl flex flex-row mt-8 justify-between">
-        <Button type="normal" label="Back" onClick={() => setStep(step - 1)} />
-        <div className="flex gap-3">
-          <Button type="normal" label="Generate Discounts" onClick={generateDiscounts} />
-          <Button type="normal" label="Next" disabled onClick={() => setStep(step + 1)} />
+
+      {/* Sticky footer spacer so last cards aren't hidden */}
+      <div className="h-24" />
+
+      {/* Sticky action bar */}
+      <div
+        className="
+          fixed inset-x-0 bottom-0 z-40
+          border-t border-gray-200
+          bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/70
+          shadow-[0_-6px_12px_-8px_rgba(0,0,0,0.15)]
+          py-3
+          pb-[calc(0.75rem+env(safe-area-inset-bottom))]
+        "
+      >
+        <div className="max-w-6xl mx-auto px-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col">
+              <span className="text-sm font-medium text-gray-800">
+                Step 4: Discount Generation
+              </span>
+              <span className="text-xs text-gray-500">
+                Changes are saved locally. Use “Generate Discounts” to export payload.
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 sm:gap-3">
+              {/* Optional compact strategy selector for small screens */}
+              <select
+                className="border rounded px-2 py-1 text-sm block sm:hidden"
+                value={strategy}
+                onChange={(e) => applyStrategy(e.target.value as Strategy)}
+              >
+                <option>Balanced</option>
+                <option>Conservative</option>
+                <option>Aggressive</option>
+              </select>
+
+              <Button type="normal" label="Back" onClick={() => setStep(step - 1)} />
+              <Button type="normal" label="Generate Discounts" onClick={generateDiscounts} />
+              <Button type="normal" label="Next" disabled onClick={() => setStep(step + 1)} />
+            </div>
+          </div>
         </div>
       </div>
     </div>

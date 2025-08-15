@@ -46,51 +46,64 @@ AMENITY_USAGE_COLS = {
 # -------------------------
 # 1) LOAD & VALIDATE
 # -------------------------
-def load_inputs():
-    with open("/Users/Gurdeep/Documents/Research Project Repo/directboost-ai/backend/data/discounts.json", "r") as f:
-        segments = json.load(f)
+def load_inputs(email):
+    
+    try:
+        # Step 1: Fetch user ID
+        response = supabase.table("users").select("user_id").eq("email", email).execute()
+        if not response.data:
+            return {"success": False, "message": f"No user found with email: {email}"}
 
-    financials = pd.read_csv("/Users/Gurdeep/Documents/Research Project Repo/directboost-ai/backend/data/financials_roomtype_2025_2027_with_amenities.csv")
+        user_id = response.data[0]["user_id"]
 
-    response = supabase.rpc("get_booking_segments", {"p_user_id": "6a6cc5b5-7af2-45ac-afd4-6a6321a5f9ac"}).execute()
-    bookings = pd.DataFrame(response.data)
-    print(response)
+        
+        #Step 2: make all previous booking history as inactive
+        response = supabase.table("financials").select("*").eq("user_id",user_id).eq("is_active", True).execute()
 
-    # ---- Validate bookings
-    missing = REQUIRED_BOOKING_COLS - set(bookings.columns)
-    if missing:
-        raise ValueError(f"Bookings missing columns: {sorted(missing)}")
+        financials = pd.DataFrame(response.data)
+        financials.drop(columns=["id", "user_id",'is_active', 'created_at', 'updated_at'], inplace=True)
+        response = supabase.rpc("get_booking_segments", {"p_user_id": user_id}).execute()
+        bookings = pd.DataFrame(response.data)
+        print(response)
 
-    # ---- Normalize keys used for joins
-    bookings["hotel_norm"] = bookings["hotel"].str.lower().str.strip()
-    financials["hotel_norm"] = financials["hotel_name"].str.lower().str.strip()
+        # ---- Validate bookings
+        missing = REQUIRED_BOOKING_COLS - set(bookings.columns)
+        if missing:
+            raise ValueError(f"Bookings missing columns: {sorted(missing)}")
 
-    # Normalize room types on both sides (string, trimmed)
-    bookings["reserved_room_type"] = bookings["reserved_room_type"].astype(str).str.strip()
-    financials["room_type"] = financials["room_type"].astype(str).str.strip()
+        # ---- Normalize keys used for joins
+        bookings["hotel_norm"] = bookings["hotel"].str.lower().str.strip()
+        financials["hotel_norm"] = financials["hotel_name"].str.lower().str.strip()
 
-    # adr -> numeric
-    bookings["adr"] = pd.to_numeric(bookings["adr"], errors="coerce")
+        # Normalize room types on both sides (string, trimmed)
+        bookings["reserved_room_type"] = bookings["reserved_room_type"].astype(str).str.strip()
+        financials["room_type"] = financials["room_type"].astype(str).str.strip()
 
-    # month lower-case in bookings for logic
-    bookings["arrival_date_month_lc"] = bookings["arrival_date_month"].astype(str).str.lower()
-    if not bookings["arrival_date_month_lc"].isin(MONTH_TO_NUM.keys()).all():
-        bad = bookings.loc[~bookings["arrival_date_month_lc"].isin(MONTH_TO_NUM.keys()), "arrival_date_month"].unique()
-        raise ValueError(f"Unexpected month names in bookings: {bad.tolist()}")
+        # adr -> numeric
+        bookings["adr"] = pd.to_numeric(bookings["adr"], errors="coerce")
 
-    # ---- Financials soft checks (warn only)
-    expected_fin_cols = {
-        "hotel_name","hotel_norm","month","year","room_type",
-        "target_booking_percent","forecast_booking_percent"
-    }
-    missing_fin = expected_fin_cols - set(financials.columns)
-    if missing_fin:
-        print(f"[WARN] Financials missing columns: {sorted(missing_fin)} — some features may degrade.")
+        # month lower-case in bookings for logic
+        bookings["arrival_date_month_lc"] = bookings["arrival_date_month"].astype(str).str.lower()
+        if not bookings["arrival_date_month_lc"].isin(MONTH_TO_NUM.keys()).all():
+            bad = bookings.loc[~bookings["arrival_date_month_lc"].isin(MONTH_TO_NUM.keys()), "arrival_date_month"].unique()
+            raise ValueError(f"Unexpected month names in bookings: {bad.tolist()}")
 
-    return bookings, financials, segments
-
-
-
+        # ---- Financials soft checks (warn only)
+        expected_fin_cols = {
+            "hotel_name","hotel_norm","month","year","room_type",
+            "target_booking_percent","forecast_booking_percent"
+        }
+        missing_fin = expected_fin_cols - set(financials.columns)
+        if missing_fin:
+            print(f"[WARN] Financials missing columns: {sorted(missing_fin)} — some features may degrade.")
+        
+        return bookings, financials
+    
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Something went wrong while uploading the file. Error: {str(e)}"
+        }
 # -------------------------
 # 2) FEATURE ENGINEERING
 # -------------------------
@@ -446,6 +459,7 @@ def prepare_email_ready_output(df: pd.DataFrame) -> pd.DataFrame:
 
     df["amenities_used_before"] = df.apply(extract_used_amenities, axis=1)
 
+    
     # Columns to include in final output
     cols = [
         "id", "booking_segment_record_id",
@@ -469,8 +483,9 @@ def prepare_email_ready_output(df: pd.DataFrame) -> pd.DataFrame:
 # -------------------------
 # 8) RUN
 # -------------------------
-def genrate_personalised_discounts():
-    bookings, financials, segments = load_inputs()
+def genrate_personalised_discounts(email, discountConfig):
+    bookings, financials = load_inputs(email)
+    segments = discountConfig
     bookings = add_features(bookings)
 
     result = generate_targets(
@@ -481,10 +496,128 @@ def genrate_personalised_discounts():
         only_critical=False,
         gap_threshold=10.0
     )
-    if not result.empty:
-        final_best = pick_best_month_per_customer(result, bookings)
-        final_ready = prepare_email_ready_output(final_best)
-        final_ready.to_csv("final_discount_targets2.csv", index=False)
-        print(f" Saved final_discount_targets.csv with {len(final_ready)} rows.")
+
+    if result.empty:
+        return {"success": False, "message": "No discount offers generated."}
+
+    final_best = pick_best_month_per_customer(result, bookings)
+    final_ready = prepare_email_ready_output(final_best)
+
+    # Optional: save a CSV for debugging
+    final_ready.to_csv("final_discount_targets2.csv", index=False)
+    print(f"Saved final_discount_targets.csv with {len(final_ready)} rows.")
+
+    offers_list = final_ready.to_dict(orient="records")
+
+    response = save_discount_offers_to_db(email, offers_list)
+    return response
+
+
+
+def save_discount_config_to_db(email, discount_config):
+    try:
+        # Step 1: fetch user_id
+        user_res = supabase.table("users").select("user_id").eq("email", email).limit(1).execute()
+        if not user_res.data:
+            return {"success": False, "message": f"No user found with email: {email}"}
+
+        user_id = user_res.data[0]["user_id"]
+        
+
+        # Step 2: deactivate previous active rows for this user
+        supabase.table("discount_config") \
+            .update({"is_active": False}) \
+            .eq("user_id", user_id) \
+            .eq("is_active", True) \
+            .execute()
+
+        # Step 3: build rows for insert (one per segment)
+        rows = []
+        for seg in discount_config:
+            rows.append({
+                "user_id": user_id,
+                "cluster_id": seg["cluster_id"],
+                "business_label": seg["business_label"],
+                "baseline_low": seg["baseline"]["low"],
+                "baseline_shoulder": seg["baseline"]["shoulder"],
+                "baseline_high": seg["baseline"]["high"],
+                "boost_if_high_gap": seg["boost_if_high_gap"],
+                "max_perk_cost": seg["max_perk_cost"],
+                "perk_priority": seg["perk_priority"],
+                "is_active": True,
+            })
+
+        # Step 4: insert new active rows
+        insert_res = supabase.table("discount_config").insert(rows).execute()
+
+        if not insert_res.data:
+            return {
+                "success": False,
+                "message": f"Insert error: {insert_res.error.message}"
+            }
+
+        return {
+            "success": True,
+            "message": "Discount configuration saved.",
+            "inserted_rows": len(insert_res.data),
+        }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Error saving discount configuration: {str(e)}"
+        }
+        
+def save_discount_offers_to_db(email: str, discount_offers: list):
+    try:
+        # Step 1: Fetch user_id from users table
+        user_res = supabase.table("users").select("user_id").eq("email", email).execute()
+        if not user_res.data:
+            return {"success": False, "message": f"No user found with email: {email}"}
+
+        user_id = user_res.data[0]["user_id"]
+
+        # Step 2: Mark existing discount offers as inactive for this user
+        supabase.table("discount_offers").update({"is_active": False}).eq("user_id", user_id).execute()
+
+        # Step 3: Prepare new records for insertion
+        records = []
+        for offer in discount_offers:
+            records.append({
+                "booking_id": offer.get("id"),
+                "booking_segment_record_id": offer.get("booking_segment_record_id"),
+                "user_id": user_id,
+                "name": offer.get("name"),
+                "email": offer.get("email"),
+                "phone_number": offer.get("phone_number"),
+                "hotel": offer.get("hotel"),
+                "room_type": offer.get("room_type"),
+                "meal": offer.get("meal"),
+                "country": offer.get("country"),
+                "booking_segment": offer.get("booking_segment"),
+                "business_label": offer.get("business_label"),
+                "target_month": offer.get("target_month"),
+                "target_year": offer.get("target_year"),
+                "discount_pct": offer.get("discount_pct"),
+                "offer_type": offer.get("offer_type"),
+                "perks": offer.get("perks"),
+                "amenities_used_before": offer.get("amenities_used_before"),
+                "is_active": True
+            })
+
+        # Step 4: Insert into discount_offers table
+        insert_res = supabase.table("discount_offers").insert(records).execute()
+
+        if insert_res.data:
+            return {"success": True, "inserted_rows": len(insert_res.data)}
+        else:
+            return {"success": False, "message": f"Insert failed: {insert_res.error}"}
+
+    except Exception as e:
+        return {"success": False, "message": f"Error saving discount offers: {str(e)}"}
+
     
-    return {"sucess": True, "message": "discounts are succesfully genrated and saved"}
+
+    
+    
+    

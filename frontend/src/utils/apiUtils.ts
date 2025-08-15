@@ -25,7 +25,7 @@ const apiUtils = () => {
     return data
   }
 
-  const generateDiscounts = async (email: string, config: any) => {
+  const generateDiscountsAPI = async (email: string, config: any) => {
     const res = await fetch(`${apiUrl}/discounts/genrate_discounts`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -34,6 +34,16 @@ const apiUtils = () => {
     const data = await res.json().catch(() => ({}));
     return { success: res.ok, ...data };
   };
+
+  // 📌 New: Fetch discount summary
+  const getDiscountSummary = async (email: string) => {
+    const res = await fetch(`${apiUrl}/discounts/summary?email=${encodeURIComponent(email)}`, {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+    })
+    return await res.json()
+  }
+
 
 
   const validateUser = async (email: string) => {
@@ -76,7 +86,7 @@ const apiUtils = () => {
 
   }
 
-  return { uploadBookingFile, validateUser, genrateCustomerSegments, getSegmentProfiles, uploadFinanacialsFile, generateDiscounts }
+  return { uploadBookingFile, validateUser, genrateCustomerSegments, getSegmentProfiles, uploadFinanacialsFile, generateDiscountsAPI, getDiscountSummary }
 }
 
 

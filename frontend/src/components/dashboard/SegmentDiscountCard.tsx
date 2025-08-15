@@ -107,8 +107,8 @@ export default function SegmentDiscountCard({ value, onChange, onCopyToAll }: Pr
         <span className="whitespace-nowrap">{PERK_LABELS[perk]}</span>
         {selected && (
           <span className="ml-2 hidden items-center gap-1 align-middle text-gray-600 group-hover:inline-flex">
-            <button
-              type="button"
+            <p
+              typeof="button"
               aria-label="Move up"
               className="rounded px-1 hover:bg-blue-100"
               onClick={(e) => {
@@ -117,9 +117,9 @@ export default function SegmentDiscountCard({ value, onChange, onCopyToAll }: Pr
               }}
             >
               ↑
-            </button>
-            <button
-              type="button"
+            </p>
+            <p
+              typeof="button"
               aria-label="Move down"
               className="rounded px-1 hover:bg-blue-100"
               onClick={(e) => {
@@ -128,7 +128,7 @@ export default function SegmentDiscountCard({ value, onChange, onCopyToAll }: Pr
               }}
             >
               ↓
-            </button>
+            </p>
           </span>
         )}
       </button>
@@ -154,9 +154,9 @@ export default function SegmentDiscountCard({ value, onChange, onCopyToAll }: Pr
       {/* Baseline row (inputs in %) */}
       <div className="grid grid-cols-3 gap-3 mb-4">
         {(["low", "shoulder", "high"] as const).map((season) => (
-          <div key={season}>
+          <div key={season} >
             <label className="block text-xs text-gray-600 mb-1">
-              {season === "low" ? "Low Season (%)" : season === "shoulder" ? "Shoulder Season (%)" : "High Season (%)"}
+              {season === "low" ? "Low Season" : season === "shoulder" ? "Shoulder Season" : "High Season"}
             </label>
             <div className="relative">
               <input
@@ -177,7 +177,7 @@ export default function SegmentDiscountCard({ value, onChange, onCopyToAll }: Pr
       {/* Boost & Cap (boost in %) */}
       <div className="grid grid-cols-2 gap-3 mb-4">
         <div>
-          <label className="block text-xs text-gray-600 mb-1">Boost if High Gap (%)</label>
+          <label className="block text-xs text-gray-600 mb-1">Boost if High Gap</label>
           <div className="relative">
             <input
               type="number"
@@ -192,7 +192,7 @@ export default function SegmentDiscountCard({ value, onChange, onCopyToAll }: Pr
           </div>
         </div>
         <div>
-          <label className="block text-xs text-gray-600 mb-1">Max Perk Cost (£)</label>
+          <label className="block text-xs text-gray-600 mb-1">Max Perk Cost (€)</label>
           <input
             type="number"
             min={0}
