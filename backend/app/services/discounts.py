@@ -1,155 +1,490 @@
 import pandas as pd
 import json
+from datetime import datetime
 from app.db.supabase_client import supabase
 
-# ---------------------------------
-# 1. Load Manager Inputs
-# ---------------------------------
-
-
-def load_data():
-# Segment config provided by managers (JSON file or from API)
-    with open("/Users/Gurdeep/Documents/Research Project Repo/directboost-ai/backend/data/discounts.json", "r") as f:
-        segment_config = json.load(f)
-
-# Financial data (CSV from managers)
-    financials = pd.read_csv("/Users/Gurdeep/Documents/Research Project Repo/directboost-ai/backend/data/hotel_financials.csv")
-
-# Booking history from DB extract
-    
-    response = supabase.rpc("get_booking_segments", {"p_user_id": "6a6cc5b5-7af2-45ac-afd4-6a6321a5f9ac"}).execute()
-    bookings =  pd.DataFrame(response.data)
-
-    print(response)
-# ---------------------------------
-# 2. Normalise & Merge
-# ---------------------------------
-    financials['hotel_norm'] = financials['hotel_name'].str.lower().str.strip()
-    bookings['hotel_norm'] = bookings['hotel'].str.lower().str.strip()
-
-    bookings = bookings.merge(
-        financials,
-        left_on=['hotel_norm', 'arrival_date_month', 'arrival_date_year'],
-        right_on=['hotel_norm', 'month', 'year'],
-        how='left'
+# -------------------------
+# Helpers & constants
+# -------------------------
+MONTH_TO_NUM = {
+    m.lower(): i for i, m in enumerate(
+        ["January","February","March","April","May","June","July","August","September","October","November","December"], 1
     )
-    return bookings, segment_config
+}
 
-# ---------------------------------
-# 3. Feature Engineering
-# ---------------------------------
+REQUIRED_BOOKING_COLS = {
+    "id","booking_segment_record_id","user_id","hotel","name","email","phone_number",
+    "arrival_date_year","arrival_date_month","arrival_date_week_number","lead_time",
+    "market_segment","is_repeated_guest","reserved_room_type","adr","country","meal",
+    "booking_segment","cluster_id","business_label",
+    "is_gym_used","is_spa_used","is_swimming_pool_used","is_bar_used",
+    "is_gaming_room_used","is_kids_club_used","is_meeting_room_used","is_work_desk_used"
+}
 
-def add_features(bookings):
-    amen_cols = ['is_gym_used', 'is_spa_used', 'is_kids_club_used', 'is_bar_used']
-    bookings['occ_gap'] = bookings['target_booking_%'] - bookings['forecast_booking_%']
-    bookings['amenity_count'] = bookings[amen_cols].sum(axis=1)
-    bookings['amenity_pref_high'] = (bookings['amenity_count'] >= 2).astype(int)
-    bookings['is_price_sensitive'] = bookings['market_segment'].str.lower().isin(
-        ['online ta', 'offline ta/to']
+# Perk synonyms to align amenity usage + financial cost columns
+PERK_COST_COLS = {
+    "spa": "spa_cost",
+    "gym": "gym_cost",
+    "kids_club": "kids_club_cost",
+    "bar_credit": "bar_credit_cost",
+    "swimming_pool": "swimming_pool_cost",
+    "work_desk": "work_desk_cost",
+    "meeting_room": "meeting_room_cost"
+}
+
+AMENITY_USAGE_COLS = {
+    "spa": "is_spa_used",
+    "gym": "is_gym_used",
+    "kids_club": "is_kids_club_used",
+    "bar": "is_bar_used",  # not a perk name, but useful signal
+    "swimming_pool": "is_swimming_pool_used",
+    "work_desk": "is_work_desk_used",
+    "meeting_room": "is_meeting_room_used",
+    "gaming_room": "is_gaming_room_used"  # not a perk, signal only
+}
+
+# -------------------------
+# 1) LOAD & VALIDATE
+# -------------------------
+def load_inputs():
+    with open("/Users/Gurdeep/Documents/Research Project Repo/directboost-ai/backend/data/discounts.json", "r") as f:
+        segments = json.load(f)
+
+    financials = pd.read_csv("/Users/Gurdeep/Documents/Research Project Repo/directboost-ai/backend/data/financials_roomtype_2025_2027_with_amenities.csv")
+
+    response = supabase.rpc("get_booking_segments", {"p_user_id": "6a6cc5b5-7af2-45ac-afd4-6a6321a5f9ac"}).execute()
+    bookings = pd.DataFrame(response.data)
+    print(response)
+
+    # ---- Validate bookings
+    missing = REQUIRED_BOOKING_COLS - set(bookings.columns)
+    if missing:
+        raise ValueError(f"Bookings missing columns: {sorted(missing)}")
+
+    # ---- Normalize keys used for joins
+    bookings["hotel_norm"] = bookings["hotel"].str.lower().str.strip()
+    financials["hotel_norm"] = financials["hotel_name"].str.lower().str.strip()
+
+    # Normalize room types on both sides (string, trimmed)
+    bookings["reserved_room_type"] = bookings["reserved_room_type"].astype(str).str.strip()
+    financials["room_type"] = financials["room_type"].astype(str).str.strip()
+
+    # adr -> numeric
+    bookings["adr"] = pd.to_numeric(bookings["adr"], errors="coerce")
+
+    # month lower-case in bookings for logic
+    bookings["arrival_date_month_lc"] = bookings["arrival_date_month"].astype(str).str.lower()
+    if not bookings["arrival_date_month_lc"].isin(MONTH_TO_NUM.keys()).all():
+        bad = bookings.loc[~bookings["arrival_date_month_lc"].isin(MONTH_TO_NUM.keys()), "arrival_date_month"].unique()
+        raise ValueError(f"Unexpected month names in bookings: {bad.tolist()}")
+
+    # ---- Financials soft checks (warn only)
+    expected_fin_cols = {
+        "hotel_name","hotel_norm","month","year","room_type",
+        "target_booking_percent","forecast_booking_percent"
+    }
+    missing_fin = expected_fin_cols - set(financials.columns)
+    if missing_fin:
+        print(f"[WARN] Financials missing columns: {sorted(missing_fin)} — some features may degrade.")
+
+    return bookings, financials, segments
+
+
+
+# -------------------------
+# 2) FEATURE ENGINEERING
+# -------------------------
+def add_features(bookings: pd.DataFrame) -> pd.DataFrame:
+    # amenity intensity
+    amen_cols = ["is_gym_used","is_spa_used","is_kids_club_used","is_bar_used",
+                 "is_swimming_pool_used","is_work_desk_used","is_meeting_room_used"]
+    existing = [c for c in amen_cols if c in bookings.columns]
+    bookings["amenity_count"] = bookings[existing].sum(axis=1)
+
+    # price sensitivity
+    bookings["is_price_sensitive"] = bookings["market_segment"].astype(str).str.lower().isin(
+        ["online ta","offline ta/to","ta/to","ta","ota"]
     ).astype(int)
-    bookings['is_last_minute'] = (bookings['lead_time'] <= 3).astype(int)
+
+    # last-minute
+    bookings["is_last_minute"] = (bookings["lead_time"] <= 3).astype(int)
+
     return bookings
 
-# Detect season from occupancy pattern
-def _detect_season(row):
-    occ = row['booking_%']
-    if occ < 50:
+
+def month_num(m_lc: str) -> int:
+    return MONTH_TO_NUM[m_lc]
+
+
+def match_customers_for_month(
+    bookings: pd.DataFrame,
+    hotel_norm: str,
+    month_name: str,
+    room_type: str,
+    financials: pd.DataFrame
+) -> pd.DataFrame:
+    """
+    Pick past guests who stayed in the same month at this hotel *and* in the same room type,
+    and assign the earliest *future* month-year for that hotel+room_type from financials.
+    """
+    m_lc = month_name.lower()
+    m_num = month_num(m_lc)
+
+    # Financial periods available for this hotel + room_type
+    avail = financials[
+        (financials["hotel_norm"] == hotel_norm) &
+        (financials["room_type"] == room_type)
+    ][["month", "year"]].drop_duplicates()
+
+    if avail.empty:
+        return pd.DataFrame()  # no plan for this room type at this hotel
+
+    # Attach numeric month for matching
+    avail["month_num"] = avail["month"].str.lower().map(month_num)
+    same_month = avail[avail["month_num"] == m_num]
+    if same_month.empty:
+        return pd.DataFrame()  # no plan for this month for that room type
+
+    # Earliest available (year, then month)
+    same_month = same_month.sort_values(["year", "month_num"])
+    target_period = same_month.iloc[0]
+    target_month, target_year = target_period["month"], int(target_period["year"])
+
+    # Build booking helpers
+    df = bookings.copy()
+    df["stay_month_num"] = df["arrival_date_month_lc"].map(month_num)
+    df["stay_date"] = pd.to_datetime({
+        "year": df["arrival_date_year"].astype(int),
+        "month": df["stay_month_num"],
+        "day": 1
+    })
+
+    # Past guests at same hotel + month + same room type, before target year
+    candidates = df[
+        (df["hotel_norm"] == hotel_norm) &
+        (df["stay_month_num"] == m_num) &
+        (df["reserved_room_type"] == room_type) &
+        (df["arrival_date_year"] < target_year)
+    ].copy()
+
+    if candidates.empty:
+        return pd.DataFrame()
+
+    candidates["target_month"] = target_month
+    candidates["target_year"] = target_year
+    return candidates
+
+
+
+# -------------------------
+# 3) SEASON BAND & OCC GAP PER FINANCIAL ROW
+# -------------------------
+def season_band_from_financial_row(fin_row: pd.Series) -> str:
+    """
+    Prefer explicit 'booking_percent' if present, else use forecast as a proxy.
+    """
+    if "booking_percent" in fin_row:
+        val = fin_row["booking_percent"]
+    elif "forecast_booking_percent" in fin_row:
+        val = fin_row["forecast_booking_percent"]
+    else:
+        # fallback: neutral
+        return "shoulder"
+
+    try:
+        val = float(val)
+    except Exception:
+        return "shoulder"
+
+    if val < 50:
         return "low"
-    elif occ < 75:
+    elif val < 75:
         return "shoulder"
     else:
         return "high"
 
-def detect_season(bookings):
-    bookings['season_band'] = bookings.apply(_detect_season, axis=1)
-    return bookings
 
-# ---------------------------------
-# 4. Perk Selection (based on cost)
-# ---------------------------------
-def choose_perks(row, max_cost):
+def occupancy_gap(fin_row: pd.Series) -> float:
+    tgt = fin_row.get("target_booking_percent", None)
+    fc = fin_row.get("forecast_booking_percent", None)
+    try:
+        return float(tgt) - float(fc)
+    except Exception:
+        return 0.0
+
+
+# -------------------------
+# 4) PERK SELECTION (with priority & amenity bias)
+# -------------------------
+def choose_perks(row: pd.Series, seg_conf: dict, fin_row: pd.Series) -> list[str]:
+    # Allowed perks only from manager's list
+    priority = seg_conf.get("perk_priority", [])
+    if not priority:
+        priority = ["bar_credit", "gym", "kids_club", "spa", "swimming_pool", "work_desk", "meeting_room"]
+
+    # Build cost map for allowed perks only
     cost_map = {
-        'spa': row.get('spa_cost', 0),
-        'gym': row.get('gym_cost', 0),
-        'kids_club': row.get('kids_club_cost', 0),
-        'bar_credit': row.get('bar_credit_cost', 0)
+        perk: float(fin_row.get(PERK_COST_COLS.get(perk, ""), 0) or 0)
+        for perk in priority
     }
-    sorted_perks = sorted(cost_map.items(), key=lambda x: x[1])
-    chosen = []
-    total_cost = 0
-    for perk, cost in sorted_perks:
-        if total_cost + cost <= max_cost:
+
+    # Identify perks guest has used before (and are in allowed list)
+    used_perks = [
+        perk for perk in priority
+        if AMENITY_USAGE_COLS.get(perk) and int(row.get(AMENITY_USAGE_COLS[perk], 0)) == 1
+    ]
+
+    # Remaining allowed perks guest hasn’t used yet
+    unused_perks = [perk for perk in priority if perk not in used_perks]
+
+    # Final order = used perks first, then unused perks (both restricted to manager's allowed list)
+    perk_order = used_perks + unused_perks
+
+    # Add perks while staying under budget
+    max_cost = float(seg_conf.get("max_perk_cost", 0) or 0)
+    chosen, total = [], 0.0
+    for perk in perk_order:
+        c = cost_map.get(perk, 0)
+        if total + c <= max_cost and c >= 0:
             chosen.append(perk)
-            total_cost += cost
-    return chosen, total_cost
+            total += c
 
-# ---------------------------------
-# 5. Rule Engine
-# ---------------------------------
-def rule_offer(row, segment_config):
-    seg_id = int(row['booking_segment'])
-    seg_conf = next((seg for seg in segment_config if seg['cluster_id'] == seg_id), None)
-    if not seg_conf:
-        return pd.Series({'offer_type': 'None', 'discount_pct': 0, 'perks': []})
+    return chosen
 
-    # Baseline discount from config
-    base_disc = seg_conf['baseline'].get(row['season_band'], 0)
-    
+
+
+# -------------------------
+# 5) OFFER RULES (baseline + boost + guards)
+# -------------------------
+def apply_offer_logic(row: pd.Series, seg_conf: dict, fin_row: pd.Series) -> pd.Series:
+    # Baseline by season band (low/shoulder/high)
+    season = row.get("season_band", "shoulder")
+    baseline_map = seg_conf.get("baseline", {})
+    base = float(baseline_map.get(season, 0) or 0)
+
     # Occupancy gap boost
-    if row['occ_gap'] > 10:
-        base_disc += seg_conf.get('boost_if_high_gap', 0)
+    if float(row.get("occ_gap", 0) or 0) > 10:
+        base += float(seg_conf.get("boost_if_high_gap", 0) or 0)
+
+    # Floor for price sensitive segments
+    if int(row.get("is_price_sensitive", 0)) == 1:
+        base = max(base, float(baseline_map.get("low", base) or base))
+
+    # Loyalty tweak: small discount reduction in favour of perk
+    if int(row.get("is_repeated_guest", 0)) == 1 and base > 0.05:
+        base -= 0.02
 
     # Perk selection
-    perks, perk_cost = choose_perks(row, seg_conf.get('max_perk_cost', 0))
+    perks = choose_perks(row, seg_conf, fin_row)
 
-    # Price sensitivity → bias to discount
-    if row['is_price_sensitive'] and base_disc < seg_conf['baseline']['low']:
-        base_disc = seg_conf['baseline']['low']
-
-    # Loyalty preference
-    if row.get('is_repeated_guest', 0) == 1 and base_disc > 0.05:
-        base_disc -= 0.02  # Slightly reduce discount for loyalty, give perks instead
-        if 'gym' not in perks:
-            perks.append('gym')
-
-    # ADR vs perk cost guardrail
-    adr_loss = row['adr_y'] * base_disc
-    if adr_loss > perk_cost * 0.8:
-        # Perks instead of deep discount
-        base_disc = 0.0
+    # ADR vs perk cost guardrail (if costs provided)
+    adr_val = float(row.get("adr", 0) or 0)
+    perk_total = sum(float(fin_row.get(PERK_COST_COLS.get(p, ""), 0) or 0) for p in perks)
+    if adr_val * base > 0.8 * perk_total and perk_total > 0:
+        base = 0.0  # prefer perks only
 
     return pd.Series({
-        'offer_type': 'Discount' if base_disc > 0 else 'Perk',
-        'discount_pct': round(base_disc * 100, 1),
-        'perks': perks
+        "discount_pct": round(base * 100, 1),
+        "offer_type": "Discount" if base > 0 else "Perk",
+        "perks": perks
     })
 
-# ---------------------------------
-# 6. Apply Rule Engine
-# ---------------------------------
-def apply_offers (bookings, segment_config):
-    offers = bookings.apply(lambda r: rule_offer(r,segment_config), axis=1)
-    bookings = pd.concat([bookings, offers], axis=1)
-    return bookings
 
-# ---------------------------------
-# 7. Save Output
-# ---------------------------------
-def save_bookng_offers(bookings):
-    bookings[['hotel','booking_segment_record_id' ,'arrival_date_month', 'arrival_date_year',
-            'booking_segment', 'business_label',
-            'offer_type', 'discount_pct', 'perks']].to_csv("guest_level_offers.csv", index=False)
+# -------------------------
+# 6) MAIN MONTHLY GENERATION LOOP
+# -------------------------
+def generate_targets(bookings: pd.DataFrame,
+                     financials: pd.DataFrame,
+                     segments: list[dict],
+                     target_year: int,
+                     only_critical: bool = True,
+                     gap_threshold: float = 10.0) -> pd.DataFrame:
 
-    print("✅ Guest-level offers saved to guest_level_offers.csv")
+    fin = financials.copy()
+    fin["occ_gap"] = fin["target_booking_percent"] - fin["forecast_booking_percent"]
+    if only_critical:
+        fin = fin[fin["occ_gap"] > gap_threshold]
+
+    out_frames = []
+    for _, fin_row in fin.iterrows():
+        hotel_norm = fin_row["hotel_norm"]
+        month_name = fin_row["month"]
+        room_type = fin_row["room_type"]  # <-- use room type
+        season_band = season_band_from_financial_row(fin_row)
+        occ_gap_val = occupancy_gap(fin_row)
+
+        # Only match customers whose past stay month + room type fits this financial row
+        matched = match_customers_for_month(
+            bookings=bookings,
+            hotel_norm=hotel_norm,
+            month_name=month_name,
+            room_type=room_type,
+            financials=financials
+        )
+        if matched.empty:
+            continue
+
+        # annotate month-level attrs
+        matched = matched.copy()
+        matched["season_band"] = season_band
+        matched["occ_gap"] = occ_gap_val
+        matched["target_month"] = month_name
+        matched["target_year"] = int(fin_row["year"])  # month-year coming from fin row
+        # Ensure the email-ready 'room_type' equals the plan's room type (and matches guest history)
+        matched["room_type"] = matched["reserved_room_type"]  # they match by construction
+
+        # attach offer per row
+        def _offer(row):
+            seg_conf = next((s for s in segments if int(s["cluster_id"]) == int(row["booking_segment"])), None)
+            if not seg_conf:
+                return pd.Series({"discount_pct": 0, "offer_type": "None", "perks": []})
+            return apply_offer_logic(row, seg_conf, fin_row)
+
+        offers = matched.apply(_offer, axis=1)
+        enriched = pd.concat([matched, offers], axis=1)
+        out_frames.append(enriched)
+
+    if not out_frames:
+        return pd.DataFrame()
+
+    return pd.concat(out_frames, ignore_index=True)
+
+def build_roomtype_preference(bookings: pd.DataFrame) -> pd.DataFrame:
+    """
+    For each guest (email), count how many times they stayed in each room type
+    so we can prefer their most-used type when deduping.
+    """
+    pref = (
+        bookings.groupby(["email", "reserved_room_type"], as_index=False)
+        .agg(rt_freq=("id", "count"),
+             last_year=("arrival_date_year", "max"),
+             avg_lead_time=("lead_time", "mean"))
+    )
+    # Normalize for merges
+    pref["reserved_room_type"] = pref["reserved_room_type"].astype(str).str.strip()
+    return pref
+
+def pick_best_month_per_customer(df: pd.DataFrame, bookings: pd.DataFrame) -> pd.DataFrame:
+    """
+    Deduplicate to one offer per customer (email), preferring:
+      1) Larger occupancy gap (occ_gap DESC)
+      2) Earlier target (year ASC, month ASC)
+      3) Guest’s most-used room type historically (rt_freq DESC)
+      4) As a tiny final tie-break: higher ADR (if present), else stable order
+    """
+    if df.empty:
+        return df
+
+    # Month to num
+    month_to_num = {m: i for i, m in enumerate(
+        ["January","February","March","April","May","June",
+         "July","August","September","October","November","December"], 1)
+    }
+
+    d = df.copy()
+    d["target_month_num"] = d["target_month"].map(month_to_num)
+
+    # Build preference from bookings and merge on (email, room_type)
+    pref = build_roomtype_preference(bookings)
+    # In results, `room_type` equals the guest's `reserved_room_type` by construction.
+    d = d.merge(
+        pref[["email", "reserved_room_type", "rt_freq"]],
+        left_on=["email", "room_type"],
+        right_on=["email", "reserved_room_type"],
+        how="left"
+    )
+    d["rt_freq"] = d["rt_freq"].fillna(0)
+
+    # Sorting priority:
+    #   occ_gap DESC → bigger gap first
+    #   target_year ASC → earlier year first
+    #   target_month_num ASC → earlier month first
+    #   rt_freq DESC → guest’s most-used room type first
+    #   adr DESC (optional micro tie-break if present)
+    sort_cols = ["email", "occ_gap", "target_year", "target_month_num", "rt_freq"]
+    ascending = [True, False, True, True, False]
+
+    # If ADR exists, add it as a final tie-breaker (DESC)
+    if "adr" in d.columns:
+        sort_cols.append("adr")
+        ascending.append(False)
+
+    d = d.sort_values(by=sort_cols, ascending=ascending)
+
+    # Keep first per email
+    best = d.groupby("email", as_index=False).first()
+
+    # Clean up helper columns
+    drop_cols = [c for c in ["reserved_room_type_y", "target_month_num", "rt_freq"] if c in best.columns]
+    return best.drop(columns=drop_cols, errors="ignore")
 
 
-def _genrate_discounts():
-    bookings, segment_config = load_data()
-    bookings = detect_season(bookings)
+# -------------------------
+# 7) EMAIL/NLP-READY OUTPUT
+# -------------------------
+def prepare_email_ready_output(df: pd.DataFrame) -> pd.DataFrame:
+    # Expose reserved_room_type as room_type
+    if "reserved_room_type" in df.columns and "room_type" not in df.columns:
+        df = df.copy()
+        df["room_type"] = df["reserved_room_type"]
+
+    # Map amenity usage columns to human-readable names
+    amenity_map = {
+        "is_spa_used": "spa",
+        "is_gym_used": "gym",
+        "is_kids_club_used": "kids_club",
+        "is_bar_used": "bar",
+        "is_swimming_pool_used": "swimming_pool",
+        "is_work_desk_used": "work_desk",
+        "is_meeting_room_used": "meeting_room",
+        "is_gaming_room_used": "gaming_room"
+    }
+
+    # Extract amenities used before for each customer
+    def extract_used_amenities(row):
+        return [name for col, name in amenity_map.items() if int(row.get(col, 0)) == 1]
+
+    df["amenities_used_before"] = df.apply(extract_used_amenities, axis=1)
+
+    # Columns to include in final output
+    cols = [
+        "id", "booking_segment_record_id",
+        "name", "email", "phone_number",
+        "hotel", "room_type", "meal", "country",
+        "booking_segment", "business_label",
+        "target_month", "target_year",
+        "discount_pct", "offer_type", "perks",
+        "amenities_used_before"
+    ]
+    
+    # Validate all required columns exist
+    missing = [c for c in cols if c not in df.columns]
+    if missing:
+        raise ValueError(f"Output is missing columns: {missing}")
+
+    return df[cols]
+
+
+
+# -------------------------
+# 8) RUN
+# -------------------------
+def genrate_personalised_discounts():
+    bookings, financials, segments = load_inputs()
     bookings = add_features(bookings)
-    bookings = apply_offers(bookings, segment_config)
-    save_bookng_offers(bookings)
-    return True
+
+    result = generate_targets(
+        bookings=bookings,
+        financials=financials,
+        segments=segments,
+        target_year=2025,
+        only_critical=False,
+        gap_threshold=10.0
+    )
+    if not result.empty:
+        final_best = pick_best_month_per_customer(result, bookings)
+        final_ready = prepare_email_ready_output(final_best)
+        final_ready.to_csv("final_discount_targets2.csv", index=False)
+        print(f" Saved final_discount_targets.csv with {len(final_ready)} rows.")
     
-    
-    
+    return {"sucess": True, "message": "discounts are succesfully genrated and saved"}

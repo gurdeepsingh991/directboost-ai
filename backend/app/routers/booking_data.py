@@ -5,7 +5,6 @@ from app.services.booking_data import process_booking_data
 
 router = APIRouter()
 
-
 @router.post("/uploadbookingfile")
 async def upload_file (file: UploadFile = File(...),
     email: str = Form(...)):
