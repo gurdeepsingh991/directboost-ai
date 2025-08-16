@@ -3,7 +3,7 @@ from app.routers import segmentation, user_auth, booking_data, discounts, financ
 from app.routers.models import train_test
 from fastapi.middleware.cors import CORSMiddleware
 
-app= FastAPI()
+app= FastAPI() 
 
 app.include_router(segmentation.router, prefix="/segment", tags=["segmentation"])
 app.include_router(booking_data.router, prefix="/process-bookings", tags=["uploadFile"])
