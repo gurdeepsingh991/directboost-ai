@@ -5,7 +5,7 @@ from datetime import datetime
 
 
 env_path = Path(__file__).resolve().parents[1]/".env"
-load_dotenv(dotenv_path= env_path)
+load_dotenv(dotenv_path= env_path) 
 
 SUPABASE_URL:str = os.getenv("SUPABASE_URL")
 SUPABASE_KEY:str = os.getenv("SUPABASE_KEY")
