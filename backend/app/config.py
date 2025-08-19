@@ -16,7 +16,7 @@ SEG_NUMERICAL_COLUMNS = [
     "is_canceled", "is_repeated_guest", "previous_cancellations", "previous_bookings_not_canceled",
     "booking_changes", "days_in_waiting_list", "adr", "required_car_parking_spaces",
     "special_request_count", "total_guests", "early_bird", "late_commer", "total_stay_length",
-    "is_high_spender", "weekend_ratio"
+    "is_high_spender", "weekend_ratio" 
 ]
 
 AMENITY_COLUMNS = [
