@@ -11,7 +11,7 @@ import {
 } from "react-router-dom";
 import Login from './pages/Login.tsx';
 import Dashboard from './pages/Dashboard.tsx';
-
+ 
 const router = createBrowserRouter([
   {
     path: "/",
