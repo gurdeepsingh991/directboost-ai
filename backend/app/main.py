@@ -1,8 +1,9 @@
 from fastapi import FastAPI
-from app.routers import segmentation, user_auth, booking_data, discounts, financials_data
+from app.routers import segmentation, user_auth, booking_data, discounts, financials_data, genrate_email_router
 from app.routers.models import train_test
 from fastapi.middleware.cors import CORSMiddleware
-
+from app.db.supabase_client import supabase
+from app.config import load_prompts_and_templates
 app= FastAPI()
 
 app.include_router(segmentation.router, prefix="/segment", tags=["segmentation"])
@@ -11,6 +12,12 @@ app.include_router(user_auth.router, prefix="/auth", tags=["user_auth"])
 app.include_router(train_test.router, prefix="/model", tags=["train_test"])
 app.include_router(discounts.router, prefix="/discounts", tags=["discounts"])
 app.include_router(financials_data.router, prefix="/financials", tags=["financials"])
+app.include_router(genrate_email_router.router, prefix="/email", tags=["email"])
+
+# load once at startup
+@app.on_event("startup")
+async def startup_event():
+    load_prompts_and_templates(supabase)
 
 app.add_middleware(
     CORSMiddleware,

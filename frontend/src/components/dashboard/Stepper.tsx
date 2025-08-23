@@ -4,7 +4,7 @@ interface StepperProps {
 }
 
 export default function Stepper({ step }: StepperProps) {
-    const steps = ["Upload Booking", "Upload Finance", "Segmentation", "Discounts", "Email Preview", "Send Emails"];
+    const steps = ["Customer Data", "Financial Inputs", "Segmentation", "Offer Setup", "Email Campaign", "Launch Campaign"];
     return (
         <div className="flex pt-20 justify-between mb-6 w-full  mx-auto opacity-90
           fixed inset-x-0  z-40

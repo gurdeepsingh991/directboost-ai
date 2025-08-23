@@ -85,8 +85,58 @@ const apiUtils = () => {
     return result
 
   }
+  const generateEmailsAPI = async (email:string,months:any, year:number)=>{
+    const body = { email, year, months };
+    const response = await fetch(`${apiUrl}/email/generate-email`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      const err = await response.text();
+      console.error("Generate failed:", err);
+    }
+    const result = await response.json()
+    return result
+  }
 
-  return { uploadBookingFile, validateUser, genrateCustomerSegments, getSegmentProfiles, uploadFinanacialsFile, generateDiscountsAPI, getDiscountSummary }
+  const getEmailCampaign = async (email:string)=>{
+    const formData = new FormData()
+    formData.append("email", email)
+    const response = await fetch(`${apiUrl}/email/get-email-campaigns`,
+      {
+        method: "POST",
+        body: formData
+      }
+    )
+    const result = await response.json()
+
+    return result
+  }
+
+  const getEmailPreview = async (id:string)=>{
+    const body = { campaign_id: id };
+    const response = await fetch(`${apiUrl}/email/get-email-preview`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }
+    )
+    const result = await response.json()
+
+    return result
+  }
+
+  return { uploadBookingFile, 
+    validateUser, 
+    genrateCustomerSegments, 
+    getSegmentProfiles,
+     uploadFinanacialsFile, 
+     generateDiscountsAPI, 
+     getDiscountSummary,
+     generateEmailsAPI,
+     getEmailCampaign,getEmailPreview }
 }
 
 

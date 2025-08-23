@@ -5,6 +5,7 @@ import Button from "../components/shared/Button";
 import { usePersistentState } from "../hooks/usePersistanceStorage";
 import Stepper from "../components/dashboard/Stepper";
 import Discounts from "../components/dashboard/Discounts";
+import EmailCampaign from "../components/dashboard/EmailCampaign";
 
 export default function Dashboard() {
     const [email] = usePersistentState<string>("email", "");
@@ -98,9 +99,12 @@ export default function Dashboard() {
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex flex-col">
                             <span className="text-sm font-medium text-gray-800">
-                                {step === 1 && "Step 1: Upload Booking"}
-                                {step === 2 && "Step 2: Upload Finance"}
+                                {step === 1 && "Step 1: Customer Data"}
+                                {step === 2 && "Step 2: Financial Inputs"}
                                 {step === 3 && "Step 3: Segmentation"}
+                                {step === 4 && "Step 4: Offer Setup"}
+                                {step === 5 && "Step 5: Email Campaign"}
+                                {step === 6 && "Step 6: Launch Campaign"}
                             </span>
                             <span className="text-xs text-gray-500">
                                 Your progress is saved locally. Continue when ready.
@@ -244,7 +248,9 @@ export default function Dashboard() {
                 </div>
             )}
 
-            {step === 4 && <Discounts />}
+            {step === 4 && <Discounts step={step} setStep={setStep} />}
+
+            {step === 5 && <EmailCampaign></EmailCampaign>}
         </>
     );
 }

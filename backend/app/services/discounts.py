@@ -3,51 +3,9 @@ import json
 from datetime import datetime
 from app.db.supabase_client import supabase
 
-# -------------------------
-# Helpers & constants
-# -------------------------
-MONTH_TO_NUM = {
-    m.lower(): i for i, m in enumerate(
-        ["January","February","March","April","May","June","July","August","September","October","November","December"], 1
-    )
-}
+from app.config import MONTH_TO_NUM,REQUIRED_BOOKING_COLS, PERK_COST_COLS, AMENITY_USAGE_COLS
 
-REQUIRED_BOOKING_COLS = {
-    "id","booking_segment_record_id","user_id","hotel","name","email","phone_number",
-    "arrival_date_year","arrival_date_month","arrival_date_week_number","lead_time",
-    "market_segment","is_repeated_guest","reserved_room_type","adr","country","meal",
-    "booking_segment","cluster_id","business_label",
-    "is_gym_used","is_spa_used","is_swimming_pool_used","is_bar_used",
-    "is_gaming_room_used","is_kids_club_used","is_meeting_room_used","is_work_desk_used"
-}
-
-# Perk synonyms to align amenity usage + financial cost columns
-PERK_COST_COLS = {
-    "spa": "spa_cost",
-    "gym": "gym_cost",
-    "kids_club": "kids_club_cost",
-    "bar_credit": "bar_credit_cost",
-    "swimming_pool": "swimming_pool_cost",
-    "work_desk": "work_desk_cost",
-    "meeting_room": "meeting_room_cost"
-}
-
-AMENITY_USAGE_COLS = {
-    "spa": "is_spa_used",
-    "gym": "is_gym_used",
-    "kids_club": "is_kids_club_used",
-    "bar": "is_bar_used",  # not a perk name, but useful signal
-    "swimming_pool": "is_swimming_pool_used",
-    "work_desk": "is_work_desk_used",
-    "meeting_room": "is_meeting_room_used",
-    "gaming_room": "is_gaming_room_used"  # not a perk, signal only
-}
-
-# -------------------------
-# 1) LOAD & VALIDATE
-# -------------------------
 def load_inputs(email):
-    
     try:
         # Step 1: Fetch user ID
         response = supabase.table("users").select("user_id").eq("email", email).execute()
@@ -104,9 +62,8 @@ def load_inputs(email):
             "success": False,
             "message": f"Something went wrong while uploading the file. Error: {str(e)}"
         }
-# -------------------------
-# 2) FEATURE ENGINEERING
-# -------------------------
+
+
 def add_features(bookings: pd.DataFrame) -> pd.DataFrame:
     # amenity intensity
     amen_cols = ["is_gym_used","is_spa_used","is_kids_club_used","is_bar_used",
@@ -120,7 +77,7 @@ def add_features(bookings: pd.DataFrame) -> pd.DataFrame:
     ).astype(int)
 
     # last-minute
-    bookings["is_last_minute"] = (bookings["lead_time"] <= 3).astype(int)
+    bookings["is_last_minute"] = (bookings["lead_time"] <= 7).astype(int)
 
     return bookings
 
@@ -188,10 +145,6 @@ def match_customers_for_month(
     return candidates
 
 
-
-# -------------------------
-# 3) SEASON BAND & OCC GAP PER FINANCIAL ROW
-# -------------------------
 def season_band_from_financial_row(fin_row: pd.Series) -> str:
     """
     Prefer explicit 'booking_percent' if present, else use forecast as a proxy.
@@ -226,9 +179,6 @@ def occupancy_gap(fin_row: pd.Series) -> float:
         return 0.0
 
 
-# -------------------------
-# 4) PERK SELECTION (with priority & amenity bias)
-# -------------------------
 def choose_perks(row: pd.Series, seg_conf: dict, fin_row: pd.Series) -> list[str]:
     # Allowed perks only from manager's list
     priority = seg_conf.get("perk_priority", [])
@@ -266,9 +216,6 @@ def choose_perks(row: pd.Series, seg_conf: dict, fin_row: pd.Series) -> list[str
 
 
 
-# -------------------------
-# 5) OFFER RULES (baseline + boost + guards)
-# -------------------------
 def apply_offer_logic(row: pd.Series, seg_conf: dict, fin_row: pd.Series) -> pd.Series:
     # Baseline by season band (low/shoulder/high)
     season = row.get("season_band", "shoulder")
@@ -303,9 +250,6 @@ def apply_offer_logic(row: pd.Series, seg_conf: dict, fin_row: pd.Series) -> pd.
     })
 
 
-# -------------------------
-# 6) MAIN MONTHLY GENERATION LOOP
-# -------------------------
 def generate_targets(bookings: pd.DataFrame,
                      financials: pd.DataFrame,
                      segments: list[dict],
@@ -432,9 +376,6 @@ def pick_best_month_per_customer(df: pd.DataFrame, bookings: pd.DataFrame) -> pd
     return best.drop(columns=drop_cols, errors="ignore")
 
 
-# -------------------------
-# 7) EMAIL/NLP-READY OUTPUT
-# -------------------------
 def prepare_email_ready_output(df: pd.DataFrame) -> pd.DataFrame:
     # Expose reserved_room_type as room_type
     if "reserved_room_type" in df.columns and "room_type" not in df.columns:
@@ -478,11 +419,6 @@ def prepare_email_ready_output(df: pd.DataFrame) -> pd.DataFrame:
 
     return df[cols]
 
-
-
-# -------------------------
-# 8) RUN
-# -------------------------
 def genrate_personalised_discounts(email, discountConfig):
     bookings, financials = load_inputs(email)
     segments = discountConfig
@@ -511,7 +447,6 @@ def genrate_personalised_discounts(email, discountConfig):
 
     response = save_discount_offers_to_db(email, offers_list)
     return response
-
 
 
 def save_discount_config_to_db(email, discount_config):

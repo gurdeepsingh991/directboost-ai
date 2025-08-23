@@ -46,7 +46,7 @@ export default function DiscountSummary({ email }: DiscountSummaryProps) {
 
   return (
     <div className="w-full max-w-6xl mt-6">
-      <h2 className="text-xl font-semibold mb-4">Discount Summary</h2>
+     <h2 className="text-xl font-semibold mb-4">Overall Discount Summary</h2>
 
       {/* Overall stats */}
       <div className="bg-white shadow rounded-lg p-4 mb-6 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
@@ -57,6 +57,7 @@ export default function DiscountSummary({ email }: DiscountSummaryProps) {
       </div>
 
       {/* Segment-level summary */}
+      <h2 className="text-xl font-semibold mb-4">Detailed Discount Summary</h2>
       <div className="space-y-6">
         {summary.segments?.map((seg: any) => (
           <div key={seg.segment_id} className="bg-gray-50 p-4 rounded-lg border">
