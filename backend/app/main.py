@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.routers import segmentation, user_auth, booking_data, discounts, financials_data, genrate_email_router
+from app.routers import segmentation, user_auth, booking_data, discounts, financials_data, genrate_email_router, launch_campaign
 from app.routers.models import train_test
 from fastapi.middleware.cors import CORSMiddleware
 from app.db.supabase_client import supabase
@@ -13,6 +13,7 @@ app.include_router(train_test.router, prefix="/model", tags=["train_test"])
 app.include_router(discounts.router, prefix="/discounts", tags=["discounts"])
 app.include_router(financials_data.router, prefix="/financials", tags=["financials"])
 app.include_router(genrate_email_router.router, prefix="/email", tags=["email"])
+app.include_router(launch_campaign.router, prefix="/campaign", tags=["email"])
 
 # load once at startup
 @app.on_event("startup")
