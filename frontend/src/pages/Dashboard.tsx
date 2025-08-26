@@ -6,6 +6,7 @@ import { usePersistentState } from "../hooks/usePersistanceStorage";
 import Stepper from "../components/dashboard/Stepper";
 import Discounts from "../components/dashboard/Discounts";
 import EmailCampaign from "../components/dashboard/EmailCampaign";
+import LaunchCampaign from "../components/dashboard/LaunchCampaign";
 
 export default function Dashboard() {
     const [email] = usePersistentState<string>("email", "");
@@ -250,7 +251,8 @@ export default function Dashboard() {
 
             {step === 4 && <Discounts step={step} setStep={setStep} />}
 
-            {step === 5 && <EmailCampaign></EmailCampaign>}
+            {step === 5 && <EmailCampaign step={step} setStep={setStep} ></EmailCampaign>}
+            {step === 6 && <LaunchCampaign step={step} setStep={setStep} ></LaunchCampaign>}
         </>
     );
 }

@@ -128,6 +128,22 @@ const apiUtils = () => {
     return result
   }
 
+  const launchEmailCampaign = async (payload: {
+    user_email: string;
+    campaign: { name: string; description?: string | null };
+    scope: { year: number; months: number[] };
+    email_campaign_ids: string[];
+    schedule: { mode: "now" | "later" | "smart"; schedule_at: string | null; timezone: string };
+    compliance: Record<string, boolean>;
+  }) => {
+    const res = await fetch(`${apiUrl}/campaign/launch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    return await res.json(); // -> { success, marketing_campaign_id, batch_id, queued_count }
+  };
+
   return { uploadBookingFile, 
     validateUser, 
     genrateCustomerSegments, 
@@ -136,7 +152,9 @@ const apiUtils = () => {
      generateDiscountsAPI, 
      getDiscountSummary,
      generateEmailsAPI,
-     getEmailCampaign,getEmailPreview }
+     getEmailCampaign,getEmailPreview,
+     launchEmailCampaign
+      }
 }
 
 
