@@ -47,11 +47,14 @@ ASSETS = {
         },
         "amenities": {
             "gym":                ASSET_BASE + "gym-min.jpg",
-            "kids_play_area":     ASSET_BASE + "kids-playing-area-min.jpg",
+            "kids_club":     ASSET_BASE + "kids-playing-area-min.jpg",
             "meal":               ASSET_BASE + "meal-min.jpg",
             "meeting_room":       ASSET_BASE + "meeting-room-min.jpg",
             "spa":                ASSET_BASE + "spa-min.jpg",
             "swimming_pool":      ASSET_BASE + "swimming-pool-min.jpg",
+            "bar_credit":      ASSET_BASE + "bar.jpg",
+            "work_desk":       ASSET_BASE + "work-desk.jpg",
+            "bar":           ASSET_BASE + "bar.jpg",
         },
         "hero": ASSET_BASE + "Hero-city-min.png", 
     },
@@ -63,11 +66,14 @@ ASSETS = {
         },
         "amenities": {
             "gym":                ASSET_BASE + "gym-min.jpg",
-            "kids_play_area":     ASSET_BASE + "kids-playing-area-min.jpg",
+            "kids_club":     ASSET_BASE + "kids-playing-area-min.jpg",
             "meal":               ASSET_BASE + "meal-min.jpg",
             "meeting_room":       ASSET_BASE + "meeting-room-min.jpg",
             "spa":                ASSET_BASE + "spa-min.jpg",
             "swimming_pool":      ASSET_BASE + "swimming-pool-min.jpg",
+            "bar_credit":      ASSET_BASE + "bar.jpg",
+            "work_desk":       ASSET_BASE + "work-desk.jpg",
+            "bar":           ASSET_BASE + "bar.jpg",
         },
         "hero": ASSET_BASE + "hero-resort-min.png",  # on-brand for resort
     },
@@ -75,11 +81,14 @@ ASSETS = {
 
 AMENITY_LABELS = {
     "gym": "Gym",
-    "kids_play_area": "Kids’ Play Area",
+    "kids_club": "Kids Club",
     "meal": "Dining",
     "meeting_room": "Meeting Room",
     "spa": "Spa",
     "swimming_pool": "Swimming Pool",
+    "bar_credit": "Bar Credit",         
+    "work_desk": "Work Desk",
+    "bar": "Bar",
 }
 
 
@@ -87,9 +96,12 @@ AMENITY_SLOGANS = {
     "spa": "Complimentary treatment credit",
     "gym": "Complimentary access – open late",
     "swimming_pool": "Access included – towels provided",
-    "kids_play_area": "Free play sessions for kids",
+    "kids_club": "Free play sessions for kids", 
     "meeting_room": "1-hour meeting room credit",
     "meal": "Breakfast included",
+    "bar_credit": "Enjoy a drink on us",             # <- added
+    "work_desk": "Quiet workspace with fast Wi-Fi",  # <- added
+    "bar": "Signature cocktails & lounge",
 }
 
 ROOM_LETTER_TIER: Dict[str, Dict[str, str]] = {

@@ -56,22 +56,27 @@ def get_discount_ofers(email: str, months: list[int] | None, year: int):
 
 def get_email_from_api(offer: Dict[str, Any]) -> Dict[str, str]:
     """Call OpenRouter to generate a structured EmailPlan JSON (no PII)."""
-    perks = ", ".join(offer.get("perks", [])) if offer.get("perks") else "none"
     history_context = build_history_context(offer.get("history"))
+
+    # context values (numeric discount, array perks)
+    discount_pct = float(offer.get("discount_pct") or 0)
+    perks_list = offer.get("perks") or []
+
     base_prompt = PROMPTS.get("email_generation")
     if not base_prompt:
         raise ValueError("System prompt 'email_generation' not found in DB")
 
+    # Expect the DB prompt to include optional history_heading/history_pitch and the rules we discussed
     prompt = base_prompt.format(
         segment=offer.get("business_label"),
         hotel=offer.get("hotel"),
         room_name=friendly_room_name(offer.get("room_type"), offer.get("hotel")),
         stay=f"{offer.get('target_month')} {offer.get('target_year')}",
-        discount=f"{offer.get('discount_pct')}% {offer.get('offer_type')}",
-        perks=perks,
+        discount_pct=int(discount_pct),   # numeric, no %
+        perks=perks_list,                 # array
         history=history_context,
     )
-    
+
     resp = client.chat.completions.create(
         model="meta-llama/llama-3-8b-instruct",
         messages=[{"role": "user", "content": prompt}],
@@ -86,16 +91,19 @@ def get_email_from_api(offer: Dict[str, Any]) -> Dict[str, str]:
         cleaned = extract_json(raw)
         return json.loads(cleaned)
 
+
 def fine_tune_agent(plan: Dict[str, str]) -> Dict[str, str]:
     """Optional second pass to refine style."""
     return plan
 
 def render_html_with_email(plan: Dict[str, str], offer: Dict[str, Any]) -> Dict[str, Any]:
-    # Choose images + amenity objects (label/url[/subtitle])
     imgs = select_images_for_offer(offer)
     hero_img = offer.get("hero_image_url") or imgs["hero_image_url"]
     room_img = imgs["room_image_url"]
-    amenity_imgs = imgs["amenity_images"]  # each item: {key, url, label, subtitle?}
+
+    # Complimentary perks (visuals) and previously-used amenities
+    amenity_imgs = imgs["amenity_images"]                        # freebies
+    history_amenity_imgs = imgs.get("history_amenity_images", [])  # NOT freebies
 
     # Links
     coupon = str(uuid.uuid4())[:8].upper()
@@ -104,32 +112,104 @@ def render_html_with_email(plan: Dict[str, str], offer: Dict[str, Any]) -> Dict[
     view_url  = f"https://example.com/view?m={offer['target_month']}&y={offer['target_year']}"
 
     # Discount / Perk emphasis
-    discount = offer.get("discount_pct") or 0
-    has_discount = isinstance(discount, (int, float)) and discount > 0
-    top_perk_names = [a.get("label", "") for a in amenity_imgs][:2]
-    perk_headline = ("Enjoy Complimentary " + " & ".join([p for p in top_perk_names if p])) if top_perk_names else "Exclusive Member Perks"
+    discount = float(offer.get("discount_pct") or 0)
+    has_discount = discount > 0
+    has_perks = bool(offer.get("perks")) and len(amenity_imgs) > 0
 
-    # Hero copy
-    discount_str = f"{int(discount)}% OFF" if has_discount else perk_headline
-    hero_headline = plan.get("hero_headline") or (f"{discount_str} Your Next Stay" if has_discount else perk_headline)
-    hero_kicker   = plan.get("hero_kicker") or (offer.get("hotel") or "")
-
-    # Friendly room name
+    # Friendly room name (tier → label)
     room_tier = imgs.get("room_tier") or "standard"
     room_name = ROOM_TIER_FRIENDLY.get(room_tier, room_tier.title())
 
-    # Only show meal if it’s actually complimentary (present in perks)
-    meal_is_free = any(map_amenity_name(p) == "meal" for p in (offer.get("perks") or []))
-    meal_name = MEAL_FRIENDLY.get(offer.get("meal", "").upper(), "") if meal_is_free else ""
+    # Meal shown only if actually complimentary
+    meal_is_free = any((map_amenity_name(p) == "meal") for p in (offer.get("perks") or []))
+    meal_name = MEAL_FRIENDLY.get((offer.get("meal") or "").upper(), "") if meal_is_free else ""
 
     month = offer.get("target_month", "")
     year  = offer.get("target_year", "")
 
-    # Big voucher line
+    # ---- Normalize plan copy so we never leak placeholders or "0%" ----
+    plan = {**plan}  # avoid mutating caller
+
+    # Subject / preheader fallbacks
+    if not plan.get("subject"):
+        plan["subject"] = (
+            f"{int(discount)}% OFF • {room_name} • {month} {year}" if has_discount
+            else (f"Complimentary {humanize_perks(offer.get('perks'))} • {room_name} • {month} {year}" if has_perks
+                  else f"{room_name} • {month} {year}")
+        )
+    if not plan.get("preheader"):
+        plan["preheader"] = (
+            f"Save {int(discount)}% on your next stay at {offer.get('hotel','our hotel')}."
+            if has_discount else
+            (f"Enjoy complimentary {humanize_perks(offer.get('perks'))} on us." if has_perks
+             else f"Plan your {month} {year} stay with us.")
+        )
+
+    # Greeting must keep {{first_name}}
+    plan.setdefault("greeting", "Dear {{first_name}},")
+
+    # Offer line: discount-first, else perks, else neutral — NEVER print 0%
+    nights_text = plural_nights(offer.get("offer_days"))
     if has_discount:
-        big_offer_line = plan.get("big_offer_line") or f"{discount_str} • {room_name} • {month} {year}"
+        core = f"Book your {room_name} for {month} {year}"
+        if nights_text: core += f" and stay for {nights_text}"
+        plan["offer_line"] = plan.get("offer_line") or f"{core} to enjoy an exclusive {int(discount)}% off."
     else:
-        big_offer_line = plan.get("big_offer_line") or f"{perk_headline} • {room_name} • {month} {year}"
+        if has_perks:
+            core = f"Book your {room_name} for {month} {year}"
+            if nights_text: core += f" and stay for {nights_text}"
+            plan["offer_line"] = plan.get("offer_line") or f"{core} and enjoy complimentary {humanize_perks(offer.get('perks'))}."
+        else:
+            plan["offer_line"] = plan.get("offer_line") or f"Book your {room_name} for {month} {year}."
+
+    # ----- Complimentary section copy -----
+    if has_perks:
+        amenities_heading = plan.get("amenities_heading") or "Your Complimentary Perks"
+        perks_pitch = plan.get("perks_pitch") or plan.get("perks_line") or "Enjoy a few extras on us."
+    else:
+        amenities_heading = ""
+        perks_pitch = ""
+
+    # ----- Previously-enjoyed section logic (dynamic + compact when both exist) -----
+    perk_keys = set(k.get("key") for k in (amenity_imgs or []))
+    hist_imgs_all = history_amenity_imgs or []
+    hist_imgs = [h for h in hist_imgs_all if h.get("key") not in perk_keys]
+
+    has_history = len(hist_imgs) > 0
+    history_only_mode = (not has_perks) and has_history
+
+    if has_perks and has_history:
+        hist_imgs = hist_imgs[:2]   # keep tight when both present
+        show_history = True
+    else:
+        show_history = history_only_mode
+
+    if show_history:
+        history_heading = plan.get("history_heading") or "Amenities from your last stay — now even better"
+        history_pitch = plan.get("history_pitch") or (
+            "We’ve refreshed and upgraded the facilities you enjoyed previously, ready for you to experience again."
+        )
+    else:
+        history_heading = ""
+        history_pitch = ""
+        hist_imgs = []
+
+    # Hero copy for header image (kept)
+    if has_discount:
+        hero_headline = plan.get("hero_headline") or f"{int(discount)}% OFF Your Next Stay"
+    elif has_perks:
+        hero_headline = plan.get("hero_headline") or f"Enjoy Complimentary {humanize_perks(offer.get('perks'))}"
+    else:
+        hero_headline = plan.get("hero_headline") or "A Special Offer for Your Next Stay"
+    hero_kicker   = plan.get("hero_kicker") or (offer.get("hotel") or "")
+
+    # Big voucher line (badge fallback; HTML computes its own but keep for safety)
+    if has_discount:
+        big_offer_line = plan.get("big_offer_line") or f"{int(discount)}% OFF • {room_name} • {month} {year}"
+    elif has_perks:
+        big_offer_line = plan.get("big_offer_line") or f"Enjoy Complimentary {humanize_perks(offer.get('perks'))} • {room_name} • {month} {year}"
+    else:
+        big_offer_line = plan.get("big_offer_line") or f"{room_name} • {month} {year}"
 
     # Room caption
     if meal_is_free and meal_name:
@@ -137,19 +217,8 @@ def render_html_with_email(plan: Dict[str, str], offer: Dict[str, Any]) -> Dict[
     else:
         room_caption = plan.get("room_caption") or f"{room_name} • {month} {year}".strip(" •")
 
-    # Amenities heading & pitch (LLM-supplied; no hardcoding)
-    amenities_heading = plan.get("amenities_heading") or "Your Complimentary Perks"
-    perks_pitch = plan.get("perks_pitch") or plan.get("perks_line") or ""
-
-    # Socials (optional)
-    social_links = {
-        "facebook": offer.get("facebook_url") or "https://facebook.com",
-        "instagram": offer.get("instagram_url") or "https://instagram.com",
-        "twitter": offer.get("twitter_url") or "https://twitter.com",
-    }
-
     template = TEMPLATES["default_html_template"]
-    
+
     html = template.render(
         plan=plan,
         cta_url=cta_url,
@@ -158,7 +227,12 @@ def render_html_with_email(plan: Dict[str, str], offer: Dict[str, Any]) -> Dict[
 
         hero_image_url=hero_img,
         room_image_url=room_img,
+
+        # Complimentary perks only
         amenity_images=amenity_imgs,
+
+        # Previously-used amenities (controlled/trimmed)
+        history_amenity_images=hist_imgs,
 
         hero_headline=hero_headline,
         hero_kicker=hero_kicker,
@@ -166,30 +240,53 @@ def render_html_with_email(plan: Dict[str, str], offer: Dict[str, Any]) -> Dict[
 
         room_caption=room_caption,
 
+        # Complimentary block copy
         amenities_heading=amenities_heading,
         perks_pitch=perks_pitch,
 
-        social_links=social_links,
+        # History block control + copy
+        show_history=show_history,
+        history_heading=history_heading,
+        history_pitch=history_pitch,
+
+        # variables used by the new badge/subhead helpers in HTML
+        discount_pct=discount,
+        perks=offer.get("perks") or [],
+        room_type_label=room_name,
+        target_month=month,
+        target_year=year,
+        offer_days=offer.get("offer_days"),
+
+        social_links={
+            "facebook": offer.get("facebook_url") or "https://facebook.com",
+            "instagram": offer.get("instagram_url") or "https://instagram.com",
+            "twitter": offer.get("twitter_url") or "https://twitter.com",
+        },
         contact_line=plan.get("contact_line"),
         sender=offer.get("hotel", "Our Hotel"),
         sender_address="123 Riverside, London, UK"
     )
 
-    # Plain text mirrors the pitch without HTML
-    plain = (
-        f"{plan['greeting']}\n\n"
-        f"{plan['opening_line']}\n"
-        f"{plan['offer_line']}\n"
-        f"{perks_pitch or plan.get('perks_line','')}\n\n"
-        f"{plan['cta_text']}: {cta_url}"
-    )
+    # Plain text mirrors the pitch without claiming perks if there are none
+    plain_bits = [
+        plan.get("greeting",""),
+        "",
+        plan.get("opening_line",""),
+        plan.get("offer_line",""),
+    ]
+    if perks_pitch:
+        plain_bits.append(perks_pitch)
+    plain_bits += ["", f"{plan.get('cta_text','Book Now')}: {cta_url}"]
+    plain = "\n".join(plain_bits)
 
     return {
-        **plan,  
+        **plan,
         "html": html,
         "plain_text": plain,
         "coupon_code": coupon,
     }
+
+
 
 def genrate_offer_emails(offer):
     try:
@@ -443,33 +540,51 @@ def select_images_for_offer(offer: Dict[str, Any]) -> Dict[str, Any]:
     room_img = assets["rooms"].get(tier) or next(iter(assets["rooms"].values()))
     hero_img = assets.get("hero") or room_img
 
-    # choose amenities from offer perks or sensible defaults
-    amenity_keys: List[str] = []
-    if offer.get("perks"):
-        for p in offer["perks"]:
-            k = map_amenity_name(p)
-            if k and k not in amenity_keys and k in assets["amenities"]:
-                amenity_keys.append(k)
-    if not amenity_keys:
-        amenity_keys = [k for k in ["swimming_pool", "spa", "gym"] if k in assets["amenities"]]
-    amenity_keys = amenity_keys[:3]
+    # -------- Complimentary perks (use perk-context mapper) --------
+    perk_keys: List[str] = []
+    for p in (offer.get("perks") or []):
+        k = map_amenity_name(p, context="perk")  # <- returns e.g. "bar_credit"
+        if k and (k in assets["amenities"]) and (k not in perk_keys):
+            perk_keys.append(k)
+    perk_keys = perk_keys[:3]  # cap visuals
 
-    amenity_imgs = []
-    for k in amenity_keys:
-        amenity_imgs.append({
-            "key": k,
-            "url": assets["amenities"][k],
-            "label": AMENITY_LABELS.get(k, k.replace("_", " ").title()),
-            "subtitle": AMENITY_SLOGANS.get(k, "Complimentary for your stay"),
-        })
+    # Build the set of perk families for de-duping (e.g., {"bar", "pool"})
+    perk_families = {amenity_family(k) for k in perk_keys}
+
+    # -------- Previously-used amenities (use history-context mapper) --------
+    used_before_keys: List[str] = []
+    for p in (offer.get("amenities_used_before") or []):
+        hk = map_amenity_name(p, context="history")  # <- returns e.g. "bar"
+        if not hk or hk not in assets["amenities"]:
+            continue
+        # De-dupe: skip if its family is already covered by any free perk
+        if amenity_family(hk) in perk_families:
+            continue
+        if hk not in used_before_keys:
+            used_before_keys.append(hk)
+    used_before_keys = used_before_keys[:3]
+
+    def _mk_items(keys: List[str]):
+        return [
+            {
+                "key": k,
+                "url": assets["amenities"][k],
+                "label": AMENITY_LABELS.get(k, k.replace("_", " ").title()),
+                "subtitle": AMENITY_SLOGANS.get(k, "Complimentary for your stay"),
+            }
+            for k in keys
+        ]
 
     return {
         "hero_image_url": hero_img,
         "room_image_url": room_img,
-        "amenity_images": amenity_imgs,
+        "amenity_images": _mk_items(perk_keys),               # FREE perks (e.g., Bar Credit)
+        "history_amenity_images": _mk_items(used_before_keys),# Facilities used (e.g., Bar)
         "room_tier": tier,
-        "amenity_keys": amenity_keys,  
+        "amenity_keys": perk_keys,
     }
+
+
     
 
 def month_nums_to_names(months: list[int]) -> list[str]:
@@ -520,3 +635,60 @@ def name_in(s: str,first_name) -> str:
     return (s or "").replace("{{first_name}}", first_name).replace("{first_name}", first_name)
 
      
+def humanize_perks(perk_slugs):
+    # turn ["kids_club","bar_credit","gym"] into "Kids Club, Bar Credit and Gym"
+    words = [map_amenity_name(p).replace("_"," ").title() for p in (perk_slugs or [])]
+    if not words: return ""
+    if len(words) == 1: return words[0]
+    if len(words) == 2: return f"{words[0]} and {words[1]}"
+    return f"{', '.join(words[:-1])}, and {words[-1]}"
+
+def plural_nights(n):
+    try:
+        n = int(n)
+        return f"{n} night" if n == 1 else f"{n} nights"
+    except Exception:
+        return ""
+
+def map_amenity_name(name: str, *, context: str = "perk") -> str | None:
+    """
+    Map free-perk names and history/facility names to asset keys.
+    context: "perk" (default), "history"
+    """
+    if not name:
+        return None
+    n = name.lower()
+
+    if "gym" in n:
+        return "gym"
+    if "pool" in n or "swim" in n:
+        return "swimming_pool"
+    if "spa" in n:
+        return "spa"
+    if "kid" in n or "club" in n:
+        return "kids_club"
+    if "meeting" in n or "conference" in n:
+        return "meeting_room"
+    if "meal" in n or "breakfast" in n or "dining" in n:
+        return "meal"
+    if "desk" in n:
+        return "work_desk"
+    if "bar" in n:
+        # Perks should show "Bar Credit", history should show "Bar"
+        return "bar_credit" if context == "perk" else "bar"
+
+    return None
+
+
+def amenity_family(key: str) -> str:
+    """Canonical bucket for de-duping across perk vs facility names."""
+    k = (key or "").lower()
+    if k in {"bar_credit", "bar"}: return "bar"
+    if k in {"kids_club", "kids_play_area"}: return "kids"
+    if k in {"swimming_pool"}: return "pool"
+    if k in {"gym"}: return "gym"
+    if k in {"spa"}: return "spa"
+    if k in {"meeting_room"}: return "meeting_room"
+    if k in {"work_desk"}: return "work_desk"
+    if k in {"meal"}: return "meal"
+    return k  # fallback: treat as its own family
